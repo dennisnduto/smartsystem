@@ -248,18 +248,87 @@ class TimetableController extends Controller
     }
 
     /**
-     * Publish/Unpublish timetable
+     * Request approval for timetable
+     */
+    public function requestApproval(Timetable $timetable)
+    {
+        $this->authorize('update', $timetable);
+        
+        if ($timetable->entries->isEmpty()) {
+            return redirect()->back()
+                ->with('error', 'Cannot request approval: Timetable has no entries. Please generate entries first.');
+        }
+        
+        $timetable->requestApproval();
+        
+        return redirect()->back()
+            ->with('success', 'Timetable submitted for approval. It will be visible to students and lecturers once approved.');
+    }
+
+    /**
+     * Approve timetable
+     */
+    public function approve(Timetable $timetable)
+    {
+        $this->authorize('update', $timetable);
+        
+        $timetable->approve(auth()->user());
+        
+        return redirect()->back()
+            ->with('success', 'Timetable approved! It is now visible to students and lecturers.');
+    }
+
+    /**
+     * Reject timetable (send back to draft)
+     */
+    public function reject(Timetable $timetable)
+    {
+        $this->authorize('update', $timetable);
+        
+        $timetable->update(['status' => 'draft']);
+        
+        return redirect()->back()
+            ->with('success', 'Timetable rejected and moved back to draft.');
+    }
+
+    /**
+     * Publish/Unpublish timetable (final publish after approval)
      */
     public function toggleStatus(Timetable $timetable)
     {
         $this->authorize('update', $timetable);
         
-        $newStatus = $timetable->status === 'published' ? 'draft' : 'published';
-        $timetable->update(['status' => $newStatus]);
-        
-        $message = $newStatus === 'published' ? 'Timetable published successfully!' : 'Timetable unpublished.';
+        if ($timetable->status === 'published') {
+            $timetable->update(['status' => 'approved']);
+            $message = 'Timetable unpublished but remains approved.';
+        } else {
+            $timetable->publish(auth()->user());
+            $message = 'Timetable published successfully!';
+        }
         
         return redirect()->back()->with('success', $message);
+    }
+
+    /**
+     * Show approval page for timetables
+     */
+    public function approvals()
+    {
+        $institution = auth()->user()->institution;
+        
+        $pendingTimetables = Timetable::where('institution_id', $institution->id)
+            ->where('status', 'pending_approval')
+            ->with(['department', 'publishedBy'])
+            ->latest()
+            ->get();
+        
+        $approvedTimetables = Timetable::where('institution_id', $institution->id)
+            ->whereIn('status', ['approved', 'published'])
+            ->with(['department', 'approvedBy', 'publishedBy'])
+            ->latest()
+            ->paginate(15);
+        
+        return view('institution-admin.timetables.approvals', compact('pendingTimetables', 'approvedTimetables', 'institution'));
     }
 
     /**

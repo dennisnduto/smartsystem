@@ -29,6 +29,8 @@ class User extends Authenticatable
         'institution_id',
         'department_id',
         'phone',
+        'is_approved',
+        'school_id_path',
     ];
 
     /**
@@ -51,6 +53,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_approved' => 'boolean',
         ];
     }
 

@@ -12,9 +12,12 @@ class SelfServiceController extends Controller
     public function timetable(Request $request)
     {
         $user = $request->user();
-        // Load today's and upcoming entries for this lecturer
-        $entries = TimetableEntry::with(['unit', 'course', 'room'])
+        // Load today's and upcoming entries for this lecturer (only from approved/published timetables)
+        $entries = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
             ->where('lecturer_id', $user->lecturer_id)
+            ->whereHas('timetable', function($q) {
+                $q->whereIn('status', ['approved', 'published']);
+            })
             ->orderBy('day_of_week')
             ->orderBy('slot')
             ->get();
@@ -76,13 +79,8 @@ class SelfServiceController extends Controller
             ->orderBy('c.name')->orderBy('u.code')
             ->get();
 
-        $rooms = DB::table('rooms as r')
-            ->leftJoin('departments as d', 'd.id', '=', 'r.department_id')
-            ->where(function($q) use ($user) {
-                $q->where('d.institution_id', $user->institution_id)
-                  ->orWhereNull('r.department_id');
-            })
-            ->select('r.*')
+        $rooms = \App\Models\Room::where('institution_id', $user->institution_id)
+            ->orderBy('name')
             ->get();
 
         return view('lecturer.assigned', compact('classes', 'rooms'));
@@ -96,17 +94,29 @@ class SelfServiceController extends Controller
         $day = max(1, min(5, (int)$now->dayOfWeekIso));
         $slot = $this->timeToSlot($now->format('H:i'));
 
-        $busyRoomIds = TimetableEntry::where('day_of_week', $day)->where('slot', $slot)->pluck('room_id');
-
-        $availableRooms = DB::table('rooms as r')
-            ->leftJoin('departments as d', 'd.id', '=', 'r.department_id')
-            ->where(function($q) use ($user) {
-                $q->where('d.institution_id', $user->institution_id)
-                  ->orWhereNull('r.department_id');
+        $busyRoomIds = TimetableEntry::where('day_of_week', $day)
+            ->where('slot', $slot)
+            ->whereHas('timetable', function($q) {
+                $q->whereIn('status', ['approved', 'published']);
             })
-            ->whereNotIn('r.id', $busyRoomIds)
-            ->select('r.*')
-            ->orderBy('r.name')
+            ->pluck('room_id');
+
+        // Also check room bookings
+        $bookingBusyRoomIds = \App\Models\RoomBooking::where('institution_id', $user->institution_id)
+            ->where('status', 'active')
+            ->where('booking_date', now()->toDateString())
+            ->where(function($q) {
+                $now = now();
+                $q->where('start_time', '<=', $now->format('H:i:s'))
+                  ->where('end_time', '>=', $now->format('H:i:s'));
+            })
+            ->pluck('room_id');
+
+        $allBusyRoomIds = $busyRoomIds->merge($bookingBusyRoomIds)->unique();
+
+        $availableRooms = \App\Models\Room::where('institution_id', $user->institution_id)
+            ->whereNotIn('id', $allBusyRoomIds)
+            ->orderBy('name')
             ->get();
 
         return view('lecturer.rooms', compact('availableRooms', 'day', 'slot'));
@@ -139,8 +149,11 @@ class SelfServiceController extends Controller
         if (str_contains($q, 'next class')) {
             $now = now();
             $day = max(1, min(5, (int)$now->dayOfWeekIso));
-            $entry = TimetableEntry::with(['unit', 'course', 'room'])
+            $entry = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
                 ->where('lecturer_id', $user->lecturer_id)
+                ->whereHas('timetable', function($q) {
+                    $q->whereIn('status', ['approved', 'published']);
+                })
                 ->where(function($qq) use ($day) {
                     $qq->where('day_of_week', '>=', $day);
                 })
@@ -160,8 +173,11 @@ class SelfServiceController extends Controller
 
         if (str_contains($q, 'where am i teaching today')) {
             $today = max(1, min(5, (int)now()->dayOfWeekIso));
-            $entries = TimetableEntry::with(['unit', 'course', 'room'])
+            $entries = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
                 ->where('lecturer_id', $user->lecturer_id)
+                ->whereHas('timetable', function($q) {
+                    $q->whereIn('status', ['approved', 'published']);
+                })
                 ->where('day_of_week', $today)
                 ->orderBy('slot')->get();
             if ($entries->isEmpty()) {

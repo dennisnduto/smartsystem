@@ -8,7 +8,11 @@ class RoomPolicy
 {
     public function view(User $user, Room $room): bool
     {
-        return optional($room->department)->institution_id === $user->institution_id;
+        // Ensure room belongs to user's institution
+        if ($user->isSuperAdmin()) {
+            return true; // Super admin can view all rooms
+        }
+        return $room->institution_id === $user->institution_id;
     }
 
     public function update(User $user, Room $room): bool

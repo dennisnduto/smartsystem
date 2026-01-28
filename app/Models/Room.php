@@ -42,8 +42,23 @@ class Room extends Model
         return $this->belongsTo(Department::class);
     }
 
+    public function institution(): BelongsTo
+    {
+        return $this->belongsTo(Institution::class);
+    }
+
     public function timetableEntries(): HasMany
     {
         return $this->hasMany(TimetableEntry::class);
+    }
+
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(RoomBooking::class);
+    }
+
+    public function studentRequests(): HasMany
+    {
+        return $this->hasMany(StudentRoomRequest::class);
     }
 }

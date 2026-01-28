@@ -16,9 +16,10 @@ class RoomController extends Controller
     public function index()
     {
         $institution = Auth::user()->institution;
-        $rooms = Room::whereHas('department', function($q) use ($institution) {
-            $q->where('institution_id', $institution->id);
-        })->with('department')->latest()->paginate(10);
+        $rooms = Room::where('institution_id', $institution->id)
+            ->with('department')
+            ->latest()
+            ->paginate(10);
         
         return view('institution-admin.rooms.index', compact('rooms', 'institution'));
     }
@@ -59,6 +60,7 @@ class RoomController extends Controller
 
         $room = Room::create([
             'department_id' => $department->id,
+            'institution_id' => $institution->id,
             'name' => $request->name,
             'capacity' => $request->capacity,
             'room_type' => $request->room_type,

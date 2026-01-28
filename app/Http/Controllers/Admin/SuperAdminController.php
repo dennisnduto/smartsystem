@@ -118,11 +118,39 @@ class SuperAdminController extends Controller
 
     public function viewTimetables()
     {
-        $timetables = \App\Models\Timetable::with(['department.institution'])
+        $timetables = \App\Models\Timetable::whereIn('status', ['approved', 'published'])
+            ->with(['institution', 'department'])
             ->latest()
             ->paginate(20);
 
         return view('super-admin.timetables', compact('timetables'));
+    }
+
+    public function viewTimetable(\App\Models\Timetable $timetable)
+    {
+        if (!in_array($timetable->status, ['approved', 'published'])) {
+            abort(404);
+        }
+
+        $timetable->load(['institution', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer']);
+        
+        return view('super-admin.timetable-view', compact('timetable'));
+    }
+
+    public function downloadTimetable(\App\Models\Timetable $timetable)
+    {
+        if (!in_array($timetable->status, ['approved', 'published'])) {
+            abort(404);
+        }
+
+        $timetable->load(['institution', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer']);
+        
+        $pdf = Pdf::loadView('institution-admin.timetables.pdf', compact('timetable'));
+        $pdf->setPaper('A4', 'landscape');
+        
+        $filename = 'Timetable_' . $timetable->institution->name . '_' . $timetable->name . '_' . now()->format('Y-m-d') . '.pdf';
+        
+        return $pdf->download($filename);
     }
 
     public function generateSummaryReport()

@@ -58,7 +58,6 @@ class CourseUnitYearController extends Controller
 
         return view('institution-admin.course-unit-years.create', compact('departments','courses','units','years'));
     }
-    }
 
     public function store(Request $request)
     {

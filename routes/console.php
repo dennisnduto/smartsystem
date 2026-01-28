@@ -22,3 +22,10 @@ Artisan::command('user:make-inst-admin {email} {--password=}', function (string 
 
     $this->info("Institution admin upserted: {$email} / {$password}");
 })->purpose('Create or reset an institution admin user');
+
+// Schedule room booking auto-release
+use Illuminate\Support\Facades\Schedule;
+Schedule::call(function () {
+    $job = new \App\Jobs\ReleaseExpiredRoomBookings();
+    $job->handle();
+})->everyMinute();

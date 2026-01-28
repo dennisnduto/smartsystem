@@ -40,4 +40,12 @@ class Institution extends Model
     {
         return $this->hasMany(Timetable::class, 'institution_id');
     }
+
+    /**
+     * Get all rooms belonging to this institution.
+     */
+    public function rooms(): HasMany
+    {
+        return $this->hasMany(Room::class, 'institution_id');
+    }
 }

@@ -121,18 +121,29 @@ Route::middleware(['auth', 'institution.admin'])->prefix('institution-admin')->n
     Route::resource('course-unit-years', App\Http\Controllers\InstitutionAdmin\CourseUnitYearController::class);
     
     Route::prefix('students')->name('students.')->group(function () {
-        Route::get('/', function() { 
-            $institution = auth()->user()->institution;
-            $students = $institution->users()->where('role', 'student')->paginate(10);
-            return view('institution-admin.placeholder', ['title' => 'Students', 'items' => $students, 'type' => 'student']);
-        })->name('index');
+        Route::get('/', [App\Http\Controllers\InstitutionAdmin\StudentController::class, 'index'])->name('index');
+        Route::post('/{student}/approve', [App\Http\Controllers\InstitutionAdmin\StudentController::class, 'approve'])->name('approve');
+        Route::post('/{student}/reject', [App\Http\Controllers\InstitutionAdmin\StudentController::class, 'reject'])->name('reject');
+        Route::delete('/{student}', [App\Http\Controllers\InstitutionAdmin\StudentController::class, 'destroy'])->name('destroy');
+    });
+    
+    // Student room requests
+    Route::prefix('student-room-requests')->name('student-room-requests.')->group(function () {
+        Route::get('/', [App\Http\Controllers\InstitutionAdmin\StudentRoomRequestController::class, 'index'])->name('index');
+        Route::post('/{request}/approve', [App\Http\Controllers\InstitutionAdmin\StudentRoomRequestController::class, 'approve'])->name('approve');
+        Route::post('/{request}/reject', [App\Http\Controllers\InstitutionAdmin\StudentRoomRequestController::class, 'reject'])->name('reject');
     });
     
     // Timetable Management
-    Route::resource('timetables', App\Http\Controllers\InstitutionAdmin\TimetableController::class);
+    // Place specific routes before resource route to avoid conflicts
+    Route::get('timetables/approvals', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'approvals'])->name('timetables.approvals');
+    Route::post('timetables/{timetable}/request-approval', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'requestApproval'])->name('timetables.request-approval');
+    Route::post('timetables/{timetable}/approve', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'approve'])->name('timetables.approve');
+    Route::post('timetables/{timetable}/reject', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'reject'])->name('timetables.reject');
     Route::post('timetables/{timetable}/toggle-status', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'toggleStatus'])->name('timetables.toggle-status');
     Route::post('timetables/{timetable}/generate-entries', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'generateEntries'])->name('timetables.generate-entries');
     Route::get('timetables/{timetable}/export-pdf', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'exportPdf'])->name('timetables.export-pdf');
+    Route::resource('timetables', App\Http\Controllers\InstitutionAdmin\TimetableController::class);
 });
 
 // Lecturer self-service routes
@@ -144,6 +155,21 @@ Route::middleware(['auth'])->prefix('lecturer')->name('lecturer.')->group(functi
     Route::get('rooms', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'rooms'])->name('rooms');
     Route::post('schedule-change', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'requestChange'])->name('schedule.change');
     Route::post('chatbot', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'chatbot'])->name('chatbot');
+    
+    // Room bookings
+    Route::resource('room-bookings', App\Http\Controllers\Lecturer\RoomBookingController::class);
+});
+
+// Student routes
+Route::middleware(['auth'])->prefix('student')->name('student.')->group(function () {
+    Route::get('dashboard', [App\Http\Controllers\Student\StudentController::class, 'dashboard'])->name('dashboard');
+    Route::get('timetable', [App\Http\Controllers\Student\StudentController::class, 'timetable'])->name('timetable');
+    Route::get('rooms', [App\Http\Controllers\Student\StudentController::class, 'rooms'])->name('rooms');
+    Route::post('chatbot', [App\Http\Controllers\Student\StudentController::class, 'chatbot'])->name('chatbot');
+    Route::get('timetable/print', [App\Http\Controllers\Student\StudentController::class, 'printTimetable'])->name('timetable.print');
+    
+    // Room booking requests
+    Route::resource('room-requests', App\Http\Controllers\Student\RoomRequestController::class);
 });
 
 require __DIR__.'/auth.php';

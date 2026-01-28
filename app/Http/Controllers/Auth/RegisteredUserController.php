@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Models\{User, Course};
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
 
@@ -33,18 +34,40 @@ class RegisteredUserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'institution_id' => ['required', 'exists:institutions,id'],
+            'course_id' => ['required', 'exists:courses,id'],
+            'school_id' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'], // 5MB max
         ]);
 
+        // Verify course belongs to the selected institution
+        $course = Course::with('department.institution')->findOrFail($request->course_id);
+        if ($course->department->institution_id != $request->institution_id) {
+            return back()
+                ->withInput()
+                ->withErrors(['course_id' => 'The selected course does not belong to the selected institution.']);
+        }
+
+        // Store the school ID file
+        $schoolIdPath = $request->file('school_id')->store('school-ids', 'public');
+
+        // Create user (student)
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
+            'role' => 'student',
+            'institution_id' => $request->institution_id,
+            'is_approved' => false, // Students require approval
+            'school_id_path' => $schoolIdPath,
         ]);
+
+        // Assign course to student
+        $user->courses()->attach($request->course_id);
 
         event(new Registered($user));
 
-        Auth::login($user);
-
-        return redirect(route('dashboard', absolute: false));
+        // Don't auto-login students - they need admin approval
+        return redirect()->route('login')
+            ->with('success', 'Registration successful! Your account is pending admin approval. You will be notified once approved.');
     }
 }

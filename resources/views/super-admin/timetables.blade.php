@@ -55,10 +55,17 @@
                                             {{ $timetable->publishedBy->name ?? 'N/A' }}
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <a href="{{ route('timetables.show', $timetable) }}" 
-                                               class="text-indigo-600 hover:text-indigo-900">
-                                                View
-                                            </a>
+                                            <div class="flex gap-2">
+                                                <a href="{{ route('super-admin.timetables.view', $timetable) }}" 
+                                                   class="text-indigo-600 hover:text-indigo-900">
+                                                    View
+                                                </a>
+                                                <span class="text-gray-300">|</span>
+                                                <a href="{{ route('super-admin.timetables.download', $timetable) }}" 
+                                                   class="text-green-600 hover:text-green-900">
+                                                    Download
+                                                </a>
+                                            </div>
                                         </td>
                                     </tr>
                                 @empty

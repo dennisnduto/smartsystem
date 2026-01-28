@@ -66,14 +66,10 @@ class TimetableGenerator
         $days = range(1, 5); // Monday to Friday
         $slots = range(1, 4); // 4 slots per day
         
-        // Load all available rooms
-        $rooms = DB::table('rooms as r')
-            ->leftJoin('departments as d', 'd.id', '=', 'r.department_id')
-            ->when($institutionId, fn($q) => $q->where(function($subq) use ($institutionId) {
-                $subq->where('d.institution_id', $institutionId)
-                     ->orWhereNull('r.department_id'); // Include unassigned rooms
-            }))
-            ->select('r.id', 'r.name', 'r.capacity', 'r.room_type', 'r.department_id')
+        // Load all available rooms for the institution
+        $rooms = DB::table('rooms')
+            ->where('institution_id', $institutionId)
+            ->select('id', 'name', 'capacity', 'room_type', 'department_id')
             ->get()
             ->keyBy('id');
 

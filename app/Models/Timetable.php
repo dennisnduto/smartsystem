@@ -15,14 +15,17 @@ class Timetable extends Model
         'week_start',
         'status',
         'published_at',
-'published_by',
+        'published_by',
+        'approved_at',
+        'approved_by',
         'semester',
         'academic_year'
     ];
     
     protected $casts = [
         'week_start' => 'date',
-        'published_at' => 'datetime'
+        'published_at' => 'datetime',
+        'approved_at' => 'datetime'
     ];
 
     public function department(): BelongsTo
@@ -38,6 +41,11 @@ class Timetable extends Model
     public function publishedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'published_by');
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function entries(): HasMany
@@ -56,9 +64,19 @@ class Timetable extends Model
         return $query->where('status', 'published');
     }
 
+    public function scopeApproved($query)
+    {
+        return $query->whereIn('status', ['approved', 'published']);
+    }
+
     public function scopeDraft($query)
     {
         return $query->where('status', 'draft');
+    }
+
+    public function scopePendingApproval($query)
+    {
+        return $query->where('status', 'pending_approval');
     }
 
     // Helper methods
@@ -67,9 +85,19 @@ class Timetable extends Model
         return $this->status === 'published';
     }
 
+    public function isApproved(): bool
+    {
+        return in_array($this->status, ['approved', 'published']);
+    }
+
     public function isDraft(): bool
     {
         return $this->status === 'draft';
+    }
+
+    public function isPendingApproval(): bool
+    {
+        return $this->status === 'pending_approval';
     }
 
     public function publish(User $user = null): void
@@ -78,6 +106,22 @@ class Timetable extends Model
             'status' => 'published',
             'published_at' => now(),
             'published_by' => $user?->id
+        ]);
+    }
+
+    public function approve(User $user = null): void
+    {
+        $this->update([
+            'status' => 'approved',
+            'approved_at' => now(),
+            'approved_by' => $user?->id
+        ]);
+    }
+
+    public function requestApproval(): void
+    {
+        $this->update([
+            'status' => 'pending_approval'
         ]);
     }
 }

@@ -31,12 +31,13 @@ class DashboardController extends Controller
                 return redirect()->route('institution-admin.dashboard');
                 
             case 'lecturer':
-                // TODO: Create lecturer dashboard
-                return view('dashboard'); // Default dashboard for now
+                return redirect()->route('lecturer.dashboard');
                 
             case 'student':
+                return redirect()->route('student.dashboard');
+                
             default:
-                // Default dashboard for students and others
+                // Default dashboard for others
                 return view('dashboard');
         }
     }
