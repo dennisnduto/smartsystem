@@ -58,8 +58,11 @@ $courseUnitYears = CourseUnitYear::with(['course.department','unit'])
             ];
         })->values();
 
-        // Fallback: all units list (for when mappings are missing)
-        $unitsForJs = Unit::orderBy('code')->get(['id','code','name','year_level'])->map(function($u){
+        // Fallback: all units list (for when mappings are missing) - scoped to institution
+        $unitsForJs = Unit::where('institution_id', $institution->id)
+            ->orderBy('code')
+            ->get(['id','code','name','year_level'])
+            ->map(function($u){
             return [
                 'id' => $u->id,
                 'code' => $u->code,
@@ -225,7 +228,10 @@ $lecturerProfile = LecturerProfile::create([
                 'semester' => $m->semester,
             ];
         })->values();
-        $unitsForJs = Unit::orderBy('code')->get(['id','code','name','year_level'])->map(function($u){
+        $unitsForJs = Unit::where('institution_id', $institution->id)
+            ->orderBy('code')
+            ->get(['id','code','name','year_level'])
+            ->map(function($u){
             return [
                 'id' => $u->id,
                 'code' => $u->code,
@@ -247,7 +253,9 @@ $lecturerProfile = LecturerProfile::create([
             ];
         })->toArray();
         
-        $allUnits = Unit::orderBy('code')->get();
+        $allUnits = Unit::where('institution_id', $institution->id)
+            ->orderBy('code')
+            ->get();
         return view('institution-admin.lecturers.edit', compact('lecturer', 'departments', 'courses', 'coursesForJs', 'cuyForJs', 'unitsForJs', 'lecturerCourseAssignments', 'allUnits'));
     }
 

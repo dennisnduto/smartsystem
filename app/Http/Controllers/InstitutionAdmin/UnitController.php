@@ -5,12 +5,16 @@ namespace App\Http\Controllers\InstitutionAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\Unit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class UnitController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Unit::query();
+        $institution = Auth::user()->institution;
+
+        $query = Unit::where('institution_id', $institution->id);
         if ($term = $request->get('q')) {
             $query->where(function($q) use ($term) {
                 $q->where('code', 'like', "%$term%")
@@ -28,18 +32,26 @@ class UnitController extends Controller
 
     public function store(Request $request)
     {
+        $institution = Auth::user()->institution;
+
         $request->validate([
-            'code' => 'required|string|max:20|unique:units,code',
+            'code' => [
+                'required',
+                'string',
+                'max:20',
+                Rule::unique('units', 'code')->where(fn($q) => $q->where('institution_id', $institution->id)),
+            ],
             'name' => 'required|string|max:255',
-'hours_per_week' => 'nullable|integer|min:1|max:12',
+            'hours_per_week' => 'nullable|integer|min:1|max:12',
             'year_level' => 'nullable|integer|min:1|max:6',
             'semester' => 'nullable|integer|min:1|max:2',
         ]);
 
         Unit::create([
+            'institution_id' => $institution->id,
             'code' => strtoupper($request->code),
             'name' => $request->name,
-'hours_per_week' => $request->hours_per_week ?? 3,
+            'hours_per_week' => $request->hours_per_week ?? 3,
             'year_level' => $request->year_level,
             'semester' => $request->semester,
         ]);
@@ -54,10 +66,19 @@ class UnitController extends Controller
 
     public function update(Request $request, Unit $unit)
     {
+        $institution = Auth::user()->institution;
+
         $request->validate([
-            'code' => 'required|string|max:20|unique:units,code,' . $unit->id,
+            'code' => [
+                'required',
+                'string',
+                'max:20',
+                Rule::unique('units', 'code')
+                    ->ignore($unit->id)
+                    ->where(fn($q) => $q->where('institution_id', $institution->id)),
+            ],
             'name' => 'required|string|max:255',
-'hours_per_week' => 'nullable|integer|min:1|max:12',
+            'hours_per_week' => 'nullable|integer|min:1|max:12',
             'year_level' => 'nullable|integer|min:1|max:6',
             'semester' => 'nullable|integer|min:1|max:2',
         ]);

@@ -24,23 +24,23 @@
                             </h1>
                         </div>
                         <nav class="flex gap-4">
-                            @auth
+                                @auth
                                 <a href="{{ url('/dashboard') }}" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
-                                    Dashboard
-                                </a>
-                            @else
-                                <a href="{{ route('login') }}" class="px-4 py-2 text-gray-700 hover:text-indigo-600 transition">
-                                    Log in
-                                </a>
-                                @if (Route::has('register'))
-                                    <a href="{{ route('register') }}" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
-                                        Register
+                                        Dashboard
                                     </a>
-                                @endif
-                            @endauth
-                        </nav>
-                    </div>
-                </div>
+                                @else
+                                <a href="{{ route('login') }}" class="px-4 py-2 text-gray-700 hover:text-indigo-600 transition">
+                                        Log in
+                                    </a>
+                                    @if (Route::has('register'))
+                                    <a href="{{ route('register') }}" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                                            Register
+                                        </a>
+                                    @endif
+                                @endauth
+                            </nav>
+                                        </div>
+                                    </div>
             </header>
 
             <main class="flex-1">
@@ -52,8 +52,8 @@
                         <p class="text-xl text-gray-600 max-w-2xl mx-auto">
                             Streamline your university's scheduling with AI-powered conflict detection, 
                             real-time room availability, and automated notifications.
-                        </p>
-                    </div>
+                                    </p>
+                                </div>
 
                     <div class="grid md:grid-cols-3 gap-6 mb-12">
                         <div class="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
@@ -61,24 +61,24 @@
                                 <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                 </svg>
-                            </div>
+                                </div>
                             <h3 class="text-xl font-semibold text-gray-900 mb-2">Smart Scheduling</h3>
                             <p class="text-gray-600">
                                 AI-powered timetable generation that prioritizes lecturer availability and prevents conflicts.
-                            </p>
-                        </div>
+                                    </p>
+                                </div>
 
                         <div class="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
                             <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
                                 <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                                </svg>
-                            </div>
+                                    </svg>
+                                </div>
                             <h3 class="text-xl font-semibold text-gray-900 mb-2">Room Management</h3>
                             <p class="text-gray-600">
                                 Real-time room availability tracking with automatic booking and release capabilities.
-                            </p>
-                        </div>
+                                    </p>
+                                </div>
 
                         <div class="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition">
                             <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
@@ -108,9 +108,9 @@
                                 </a>
                             </div>
                         @endguest
-                    </div>
-                </div>
-            </main>
+                            </div>
+                        </div>
+                    </main>
 
             <footer class="bg-white border-t mt-auto">
                 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">

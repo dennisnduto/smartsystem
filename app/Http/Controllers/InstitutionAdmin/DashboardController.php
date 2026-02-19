@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\InstitutionAdmin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Institution, Department, User, Timetable, Room};
+use App\Models\{Institution, Department, User, Timetable, Room, Unit};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -21,27 +21,27 @@ class DashboardController extends Controller
 
         // Get institution statistics
         $stats = [
-'total_departments' => $institution->departments()->count(),
+            'total_departments' => $institution->departments()->count(),
             'total_schools' => $institution->schools()->count(),
-'total_courses' => $institution->departments()->withCount('courses')->get()->sum('courses_count'),
-'total_units' => \App\Models\Unit::count(),
+            'total_courses' => $institution->departments()->withCount('courses')->get()->sum('courses_count'),
+            'total_units' => Unit::where('institution_id', $institution->id)->count(),
             'total_lecturers' => $institution->users()->where('role', 'lecturer')->count(),
             'total_students' => $institution->users()->where('role', 'student')->count(),
-            'total_rooms' => Room::whereHas('department', function($q) use ($institution) {
-                $q->where('institution_id', $institution->id);
-            })->count(),
-            'active_timetables' => Timetable::whereHas('department', function($q) use ($institution) {
-                $q->where('institution_id', $institution->id);
-            })->where('status', 'published')->count(),
-            'draft_timetables' => Timetable::whereHas('department', function($q) use ($institution) {
-                $q->where('institution_id', $institution->id);
-            })->where('status', 'draft')->count(),
+            'total_rooms' => Room::where('institution_id', $institution->id)->count(),
+            'active_timetables' => Timetable::where('institution_id', $institution->id)
+                ->where('status', 'published')
+                ->count(),
+            'draft_timetables' => Timetable::where('institution_id', $institution->id)
+                ->where('status', 'draft')
+                ->count(),
         ];
 
         // Get recent activities
-        $recent_timetables = Timetable::whereHas('department', function($q) use ($institution) {
-            $q->where('institution_id', $institution->id);
-        })->with('department')->latest()->take(5)->get();
+        $recent_timetables = Timetable::where('institution_id', $institution->id)
+            ->with('department')
+            ->latest()
+            ->take(5)
+            ->get();
 
         // Get departments with stats
         $departments = $institution->departments()
@@ -58,9 +58,9 @@ class DashboardController extends Controller
             ->get();
 
         // Room availability (simplified - assume all rooms are available unless in use)
-        $available_rooms = Room::whereHas('department', function($q) use ($institution) {
-            $q->where('institution_id', $institution->id);
-        })->take(5)->get();
+        $available_rooms = Room::where('institution_id', $institution->id)
+            ->take(5)
+            ->get();
 
         // Quick stats for charts
         $department_stats = $institution->departments()
@@ -126,16 +126,16 @@ class DashboardController extends Controller
                 'students' => $institution->users()->where('role', 'student')->count(),
             ],
             'timetable_status' => [
-                'published' => Timetable::whereHas('department', function($q) use ($institution) {
-                    $q->where('institution_id', $institution->id);
-                })->where('status', 'published')->count(),
-                'draft' => Timetable::whereHas('department', function($q) use ($institution) {
-                    $q->where('institution_id', $institution->id);
-                })->where('status', 'draft')->count(),
+                'published' => Timetable::where('institution_id', $institution->id)
+                    ->where('status', 'published')
+                    ->count(),
+                'draft' => Timetable::where('institution_id', $institution->id)
+                    ->where('status', 'draft')
+                    ->count(),
             ],
-            'room_utilization' => Room::whereHas('department', function($q) use ($institution) {
-                $q->where('institution_id', $institution->id);
-            })->withCount('timetableEntries')->get(),
+            'room_utilization' => Room::where('institution_id', $institution->id)
+                ->withCount('timetableEntries')
+                ->get(),
         ];
 
         return view('institution-admin.analytics', compact('analytics', 'institution'));
@@ -152,14 +152,14 @@ class DashboardController extends Controller
                 'total_courses' => $institution->departments()->withCount('courses')->get()->sum('courses_count'),
                 'total_lecturers' => $institution->users()->where('role', 'lecturer')->count(),
                 'total_students' => $institution->users()->where('role', 'student')->count(),
-                'total_rooms' => Room::whereHas('department', function($q) use ($institution) {
-                    $q->where('institution_id', $institution->id);
-                })->count(),
+                'total_rooms' => Room::where('institution_id', $institution->id)->count(),
             ],
             'departments' => $institution->departments()->withCount(['courses', 'rooms'])->get(),
-            'recent_timetables' => Timetable::whereHas('department', function($q) use ($institution) {
-                $q->where('institution_id', $institution->id);
-            })->with('department')->latest()->take(10)->get(),
+            'recent_timetables' => Timetable::where('institution_id', $institution->id)
+                ->with('department')
+                ->latest()
+                ->take(10)
+                ->get(),
         ];
 
         return view('institution-admin.reports', compact('reports_data', 'institution'));

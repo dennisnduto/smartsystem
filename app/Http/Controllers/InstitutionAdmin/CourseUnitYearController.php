@@ -53,7 +53,9 @@ class CourseUnitYearController extends Controller
         }
         $departments = $institution->departments()->with('courses')->get();
         $courses = $departments->pluck('courses')->flatten();
-        $units = Unit::orderBy('name')->get();
+        $units = Unit::where('institution_id', $institution->id)
+            ->orderBy('name')
+            ->get();
         $years = ['Y1' => 'Year 1','Y2' => 'Year 2','Y3' => 'Year 3','Y4' => 'Year 4','Y5' => 'Year 5'];
 
         return view('institution-admin.course-unit-years.create', compact('departments','courses','units','years'));
@@ -105,7 +107,9 @@ class CourseUnitYearController extends Controller
 
         $departments = $institution->departments()->with('courses')->get();
         $courses = $departments->pluck('courses')->flatten();
-        $units = Unit::orderBy('name')->get();
+        $units = Unit::where('institution_id', $institution->id)
+            ->orderBy('name')
+            ->get();
         $years = ['Y1' => 'Year 1','Y2' => 'Year 2','Y3' => 'Year 3','Y4' => 'Year 4','Y5' => 'Year 5'];
         $semesters = ['S1' => 'Semester 1', 'S2' => 'Semester 2'];
 

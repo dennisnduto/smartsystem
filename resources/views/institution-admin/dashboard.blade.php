@@ -281,7 +281,9 @@
                             <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
                                 <div>
                                     <p class="font-medium text-gray-900">{{ $timetable->name }}</p>
-                                    <p class="text-sm text-gray-500">{{ $timetable->department->name }}</p>
+                                    <p class="text-sm text-gray-500">
+                                        {{ $timetable->department->name ?? 'Institution-wide timetable' }}
+                                    </p>
                                 </div>
                                 <div class="text-right">
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
@@ -438,7 +440,7 @@
                         <option value="S1">Semester 1</option>
                         <option value="S2">Semester 2</option>
                     </select>
-                </div
+                </div>
                 
                 <div class="flex justify-end space-x-3">
                     <button type="button" onclick="closeGenerateTimetableModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">Cancel</button>
