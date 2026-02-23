@@ -18,7 +18,7 @@
         <div class="min-h-screen bg-gray-100">
             @include('layouts.navigation')
 
-            <!-- Page Heading -->
+            <!-- Page Heading (header slot from <x-app-layout>) -->
             @isset($header)
                 <header class="bg-white shadow">
                     <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
@@ -29,13 +29,10 @@
 
             <!-- Page Content -->
             <main>
-                @isset($slot)
-                    {{ $slot }}
-                @else
-                    @yield('content')
-                @endisset
-
+                {{ $slot }}
             </main>
         </div>
     </body>
 </html>
+
+

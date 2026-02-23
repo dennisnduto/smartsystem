@@ -29,6 +29,25 @@ class AuthenticatedSessionController extends Controller
 
     $user = $request->user();
 
+    // Deactivated account guard
+    if ($user && $user->is_active === false) {
+        Auth::logout();
+        return redirect()->route('login')->withErrors([
+            'email' => 'Your account has been deactivated. Please contact the administrator.',
+        ]);
+    }
+
+    // Deactivated institution guard (for institution-scoped roles)
+    if ($user && in_array($user->role, ['institution_admin', 'lecturer', 'student'], true)) {
+        $institution = $user->institution;
+        if ($institution && isset($institution->is_active) && $institution->is_active === false) {
+            Auth::logout();
+            return redirect()->route('login')->withErrors([
+                'email' => 'Your institution is deactivated. Please contact the administrator.',
+            ]);
+        }
+    }
+
     switch ($user->role) {
         case 'super_admin':
             return redirect()->route('super-admin.dashboard');

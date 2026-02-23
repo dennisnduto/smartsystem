@@ -26,7 +26,6 @@
                                 <tr>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Institution</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week Start</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Published</th>
                                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Published By</th>
@@ -41,9 +40,6 @@
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {{ $timetable->institution->name ?? 'N/A' }}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            {{ $timetable->department->name ?? 'N/A' }}
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                             {{ $timetable->week_start ? $timetable->week_start->format('M d, Y') : 'N/A' }}
@@ -96,7 +92,7 @@
             </div>
 
             <!-- Statistics Summary -->
-            <div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="bg-white p-6 rounded-lg shadow">
                     <div class="flex items-center">
                         <div class="p-3 rounded-full bg-green-500 bg-opacity-75">
@@ -125,19 +121,6 @@
                     </div>
                 </div>
 
-                <div class="bg-white p-6 rounded-lg shadow">
-                    <div class="flex items-center">
-                        <div class="p-3 rounded-full bg-purple-500 bg-opacity-75">
-                            <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3a1 1 0 011-1h6a1 1 0 011 1v4h3a1 1 0 011 1v9a1 1 0 01-1 1H5a1 1 0 01-1-1V8a1 1 0 011-1h3z" />
-                            </svg>
-                        </div>
-                        <div class="ml-4">
-                            <p class="text-sm font-medium text-gray-600">Departments</p>
-                            <p class="text-2xl font-semibold text-gray-900">{{ $timetables->unique('department_id')->count() }}</p>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>

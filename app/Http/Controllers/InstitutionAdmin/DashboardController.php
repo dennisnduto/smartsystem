@@ -38,8 +38,8 @@ class DashboardController extends Controller
 
         // Get recent activities
         $recent_timetables = Timetable::where('institution_id', $institution->id)
-            ->with('department')
-            ->latest()
+            ->where('status', 'published')
+            ->latest('published_at')
             ->take(5)
             ->get();
 

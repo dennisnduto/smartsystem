@@ -12,15 +12,6 @@
                 <a href="{{ route('institution-admin.dashboard') }}" class="bg-white text-indigo-600 hover:bg-indigo-50 font-semibold py-2 px-4 rounded-lg shadow transition">
                     ← Dashboard
                 </a>
-                <a href="{{ route('institution-admin.timetables.approvals') }}" class="bg-purple-500 hover:bg-purple-400 text-white font-semibold py-2 px-4 rounded-lg shadow transition">
-                    ⚡ Approvals
-                    @php
-                        $pendingCount = \App\Models\Timetable::where('institution_id', $institution->id)->where('status', 'pending_approval')->count();
-                    @endphp
-                    @if($pendingCount > 0)
-                        <span class="ml-1 bg-white text-purple-600 rounded-full px-2 py-0.5 text-xs font-bold">{{ $pendingCount }}</span>
-                    @endif
-                </a>
                 <a href="{{ route('institution-admin.timetables.create') }}" class="bg-indigo-500 hover:bg-indigo-400 text-white font-semibold py-2 px-4 rounded-lg shadow transition">
                     + Create Timetable
                 </a>
@@ -49,7 +40,6 @@
                         <thead class="bg-gray-50">
                             <tr>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timetable</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Period</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
@@ -69,9 +59,6 @@
                                                 @endif
                                             </div>
                                         </div>
-                                    </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm text-gray-900">{{ $timetable->department?->name ?? 'N/A' }}</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="text-sm text-gray-900">{{ $timetable->semester ?? 'N/A' }}</div>

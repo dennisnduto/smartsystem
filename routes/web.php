@@ -33,6 +33,8 @@ Route::middleware(['auth'])->prefix('super-admin')->name('super-admin.')->group(
     
     // Timetables
     Route::get('/timetables', [SuperAdminController::class, 'viewTimetables'])->name('timetables');
+    Route::get('/timetables/{timetable}', [SuperAdminController::class, 'viewTimetable'])->name('timetables.view');
+    Route::get('/timetables/{timetable}/download', [SuperAdminController::class, 'downloadTimetable'])->name('timetables.download');
     
     // Reports
     Route::get('/reports/summary', [SuperAdminController::class, 'generateSummaryReport'])->name('generate-report');
@@ -42,7 +44,13 @@ Route::middleware(['auth'])->prefix('super-admin')->name('super-admin.')->group(
     Route::get('/institutions', [SuperAdminController::class, 'manageInstitutions'])->name('institutions');
     Route::post('/institutions', [SuperAdminController::class, 'createInstitution'])->name('create-institution');
     Route::put('/institutions/{institution}', [SuperAdminController::class, 'updateInstitution'])->name('update-institution');
+    Route::patch('/institutions/{institution}/deactivate', [SuperAdminController::class, 'deactivateInstitution'])->name('institutions.deactivate');
+    Route::patch('/institutions/{institution}/reactivate', [SuperAdminController::class, 'reactivateInstitution'])->name('institutions.reactivate');
     Route::delete('/institutions/{institution}', [SuperAdminController::class, 'deleteInstitution'])->name('delete-institution');
+
+    // Deactivation for admins (replaces hard delete in UI)
+    Route::patch('/admins/{admin}/deactivate', [SuperAdminController::class, 'deactivateAdmin'])->name('admins.deactivate');
+    Route::patch('/admins/{admin}/reactivate', [SuperAdminController::class, 'reactivateAdmin'])->name('admins.reactivate');
     
     // Test route
     Route::get('/test', function() {
@@ -112,6 +120,8 @@ Route::middleware(['auth', 'institution.admin'])->prefix('institution-admin')->n
     Route::resource('rooms', \App\Http\Controllers\InstitutionAdmin\RoomController::class);
     
     // Lecturer Management
+    Route::patch('lecturers/{lecturer}/deactivate', [App\Http\Controllers\InstitutionAdmin\LecturerController::class, 'deactivate'])->name('lecturers.deactivate');
+    Route::patch('lecturers/{lecturer}/activate', [App\Http\Controllers\InstitutionAdmin\LecturerController::class, 'activate'])->name('lecturers.activate');
     Route::resource('lecturers', App\Http\Controllers\InstitutionAdmin\LecturerController::class);
 
     // Units Management
@@ -136,9 +146,11 @@ Route::middleware(['auth', 'institution.admin'])->prefix('institution-admin')->n
     
     // Timetable Management
     // Place specific routes before resource route to avoid conflicts
-    Route::get('timetables/approvals', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'approvals'])->name('timetables.approvals');
+    // Approvals page no longer used; approval/publish is done inline on the timetable
+    // Route::get('timetables/approvals', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'approvals'])->name('timetables.approvals');
     Route::post('timetables/{timetable}/request-approval', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'requestApproval'])->name('timetables.request-approval');
     Route::post('timetables/{timetable}/approve', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'approve'])->name('timetables.approve');
+    Route::post('timetables/{timetable}/approve-and-publish', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'approveAndPublish'])->name('timetables.approve-and-publish');
     Route::post('timetables/{timetable}/reject', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'reject'])->name('timetables.reject');
     Route::post('timetables/{timetable}/toggle-status', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'toggleStatus'])->name('timetables.toggle-status');
     Route::post('timetables/{timetable}/generate-entries', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'generateEntries'])->name('timetables.generate-entries');

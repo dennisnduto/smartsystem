@@ -1,11 +1,15 @@
-@extends('layouts.app')
+<x-app-layout>
+    <x-slot name="header">
+        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+            {{ __('Lecturer Dashboard') }}
+        </h2>
+    </x-slot>
 
-@section('content')
 <div class="max-w-7xl mx-auto p-6 space-y-6">
   <div class="flex items-center justify-between">
     <div>
       <h1 class="text-2xl font-bold">Lecturer Dashboard</h1>
-      <p class="text-sm text-gray-600">Welcome back</p>
+      <p class="text-sm text-gray-600">Welcome back, {{ $user->name }}</p>
     </div>
     <div class="flex gap-2">
       <a href="{{ route('lecturer.assigned') }}" class="px-3 py-1.5 bg-indigo-600 text-white rounded">Assigned</a>
@@ -37,7 +41,13 @@
       @php
         $next = $entries->sortBy(['day_of_week','slot'])->first();
       @endphp
-      <div class="text-sm">{{ optional($next->unit)->code ?? '—' }} in {{ optional($next->room)->name ?? 'TBA' }}</div>
+      <div class="text-sm">
+        @if($next)
+            {{ optional($next->unit)->code ?? '—' }} in {{ optional($next->room)->name ?? 'TBA' }}
+        @else
+            —
+        @endif
+      </div>
     </div>
   </div>
 
@@ -173,6 +183,4 @@
     #lecturer-availability .avail-label { font-size: 11px; font-weight: 700; }
   </style>
 </div>
-@endsection
-
-
+</x-app-layout>

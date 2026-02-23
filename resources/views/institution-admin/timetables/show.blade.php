@@ -9,21 +9,16 @@
     </div>
     <div class="space-x-3">
       <a href="{{ route('institution-admin.timetables.index') }}" class="text-indigo-600 hover:underline">← Back to timetables</a>
-      <a href="{{ route('institution-admin.timetables.approvals') }}" class="px-3 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-700">Approvals</a>
       <form action="{{ route('institution-admin.timetables.generate-entries', $timetable) }}" method="POST" class="inline">
         @csrf
         <button type="submit" class="px-3 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700">Generate Entries</button>
       </form>
-      @if($timetable->status === 'draft' && $timetable->entries->isNotEmpty())
-        <form action="{{ route('institution-admin.timetables.request-approval', $timetable) }}" method="POST" class="inline">
+      @if($timetable->status !== 'published' && $timetable->entries->isNotEmpty())
+        <form action="{{ route('institution-admin.timetables.approve-and-publish', $timetable) }}" method="POST" class="inline">
           @csrf
-          <button type="submit" class="px-3 py-1.5 bg-yellow-600 text-white rounded hover:bg-yellow-700">Request Approval</button>
-        </form>
-      @endif
-      @if($timetable->status === 'approved')
-        <form action="{{ route('institution-admin.timetables.toggle-status', $timetable) }}" method="POST" class="inline">
-          @csrf
-          <button type="submit" class="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700">Publish</button>
+          <button type="submit" class="px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700">
+            Approve &amp; Publish
+          </button>
         </form>
       @endif
       @if($timetable->status === 'published')

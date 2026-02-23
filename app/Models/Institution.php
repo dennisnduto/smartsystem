@@ -9,6 +9,10 @@ class Institution extends Model
 {
     protected $guarded = [];
 
+    protected $casts = [
+        'is_active' => 'boolean',
+    ];
+
     /**
      * Get all departments under this institution.
      */

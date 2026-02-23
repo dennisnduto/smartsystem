@@ -40,6 +40,7 @@
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Courses</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
@@ -68,21 +69,40 @@
                                         @endif
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $lecturer->phone ?? 'N/A' }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                        @if($lecturer->is_active)
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                Active
+                                            </span>
+                                        @else
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800">
+                                                Deactivated
+                                            </span>
+                                        @endif
+                                    </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <div class="flex space-x-2">
                                             <a href="{{ route('institution-admin.lecturers.show', $lecturer) }}" class="text-indigo-600 hover:text-indigo-900">View</a>
                                             <a href="{{ route('institution-admin.lecturers.edit', $lecturer) }}" class="text-blue-600 hover:text-blue-900">Edit</a>
-                                            <form method="POST" action="{{ route('institution-admin.lecturers.destroy', $lecturer) }}" class="inline" onsubmit="return confirm('Are you sure you want to delete this lecturer?')">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="text-red-600 hover:text-red-900">Delete</button>
-                                            </form>
+                                            @if($lecturer->is_active)
+                                                <form method="POST" action="{{ route('institution-admin.lecturers.deactivate', $lecturer) }}" class="inline" onsubmit="return confirm('Deactivate this lecturer? They will not be able to log in.')">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="text-red-600 hover:text-red-900">Deactivate</button>
+                                                </form>
+                                            @else
+                                                <form method="POST" action="{{ route('institution-admin.lecturers.activate', $lecturer) }}" class="inline" onsubmit="return confirm('Activate this lecturer?')">
+                                                    @csrf
+                                                    @method('PATCH')
+                                                    <button type="submit" class="text-green-700 hover:text-green-900">Activate</button>
+                                                </form>
+                                            @endif
                                         </div>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="7" class="px-6 py-4 text-center text-gray-500">
+                                    <td colspan="8" class="px-6 py-4 text-center text-gray-500">
                                         <div class="flex flex-col items-center py-8">
                                             <svg class="w-12 h-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-2.239" />

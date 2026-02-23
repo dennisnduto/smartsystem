@@ -110,15 +110,33 @@ class SuperAdminController extends Controller
 
     public function deleteAdmin(User $admin)
     {
-        $admin->delete();
+        // Keep the route for backward compatibility, but do not hard-delete.
+        $admin->update(['is_active' => false]);
         
         return redirect()->route('super-admin.manage-admins')
-            ->with('success', 'Institution admin deleted successfully.');
+            ->with('success', 'Institution admin deactivated successfully.');
+    }
+
+    public function deactivateAdmin(User $admin)
+    {
+        $admin->update(['is_active' => false]);
+
+        return redirect()->route('super-admin.manage-admins')
+            ->with('success', 'Institution admin deactivated successfully.');
+    }
+
+    public function reactivateAdmin(User $admin)
+    {
+        $admin->update(['is_active' => true]);
+
+        return redirect()->route('super-admin.manage-admins')
+            ->with('success', 'Institution admin reactivated successfully.');
     }
 
     public function viewTimetables()
     {
-        $timetables = \App\Models\Timetable::whereIn('status', ['approved', 'published'])
+        // Super admin should see ONLY published timetables from all institutions
+        $timetables = \App\Models\Timetable::where('status', 'published')
             ->with(['institution', 'department'])
             ->latest()
             ->paginate(20);
@@ -164,7 +182,7 @@ class SuperAdminController extends Controller
         ];
 
         $institutions = Institution::withCount(['users', 'departments'])->get();
-        $recent_activities = \App\Models\Timetable::with(['department.institution'])
+        $recent_activities = \App\Models\Timetable::with(['institution'])
             ->latest()
             ->take(10)
             ->get();
@@ -217,13 +235,30 @@ class SuperAdminController extends Controller
 
     public function deleteInstitution(Institution $institution)
     {
-        // Delete related records
-        $institution->departments()->delete();
-        $institution->users()->delete();
-        $institution->delete();
+        // Keep the route for backward compatibility, but do not hard-delete.
+        $institution->update(['is_active' => false]);
+        $institution->users()->update(['is_active' => false]);
         
         return redirect()->route('super-admin.institutions')
-            ->with('success', 'Institution deleted successfully.');
+            ->with('success', 'Institution deactivated successfully.');
+    }
+
+    public function deactivateInstitution(Institution $institution)
+    {
+        $institution->update(['is_active' => false]);
+        $institution->users()->update(['is_active' => false]);
+
+        return redirect()->route('super-admin.institutions')
+            ->with('success', 'Institution deactivated successfully.');
+    }
+
+    public function reactivateInstitution(Institution $institution)
+    {
+        $institution->update(['is_active' => true]);
+        // NOTE: We do NOT auto-reactivate all institution users; admin can reactivate individually if needed.
+
+        return redirect()->route('super-admin.institutions')
+            ->with('success', 'Institution reactivated successfully.');
     }
 
     public function exportReport($format)
@@ -238,7 +273,7 @@ class SuperAdminController extends Controller
         ];
 
         $institutions = Institution::withCount(['users', 'departments'])->get();
-        $recent_activities = \App\Models\Timetable::with(['department.institution'])
+        $recent_activities = \App\Models\Timetable::with(['institution'])
             ->latest()
             ->take(20)
             ->get();
@@ -258,7 +293,7 @@ class SuperAdminController extends Controller
     private function exportToPDF($stats, $institutions, $recent_activities)
     {
         $data = compact('stats', 'institutions', 'recent_activities');
-        $pdf = PDF::loadView('reports.pdf-export', $data);
+        $pdf = Pdf::loadView('reports.pdf-export', $data);
         
         return $pdf->download('system-report-' . date('Y-m-d') . '.pdf');
     }
@@ -300,12 +335,11 @@ class SuperAdminController extends Controller
             
             // Recent Activities
             fputcsv($file, ['Recent Timetable Activities']);
-            fputcsv($file, ['Timetable', 'Institution', 'Department', 'Status', 'Created Date']);
+            fputcsv($file, ['Timetable', 'Institution', 'Status', 'Created Date']);
             foreach ($recent_activities as $activity) {
                 fputcsv($file, [
                     $activity->name ?? 'Unnamed',
-                    $activity->department->institution->name ?? 'N/A',
-                    $activity->department->name ?? 'N/A',
+                    $activity->institution->name ?? 'N/A',
                     ucfirst($activity->status ?? 'draft'),
                     $activity->created_at->format('Y-m-d')
                 ]);
@@ -362,12 +396,11 @@ class SuperAdminController extends Controller
             // Recent Activities
             echo "<h2>Recent Timetable Activities</h2>";
             echo "<table border='1'>";
-            echo "<tr><th>Timetable</th><th>Institution</th><th>Department</th><th>Status</th><th>Created Date</th></tr>";
+            echo "<tr><th>Timetable</th><th>Institution</th><th>Status</th><th>Created Date</th></tr>";
             foreach ($recent_activities as $activity) {
                 echo "<tr>";
                 echo "<td>" . htmlspecialchars($activity->name ?? 'Unnamed') . "</td>";
-                echo "<td>" . htmlspecialchars($activity->department->institution->name ?? 'N/A') . "</td>";
-                echo "<td>" . htmlspecialchars($activity->department->name ?? 'N/A') . "</td>";
+                echo "<td>" . htmlspecialchars($activity->institution->name ?? 'N/A') . "</td>";
                 echo "<td>" . ucfirst($activity->status ?? 'draft') . "</td>";
                 echo "<td>" . $activity->created_at->format('Y-m-d') . "</td>";
                 echo "</tr>";

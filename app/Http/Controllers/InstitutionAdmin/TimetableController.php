@@ -153,6 +153,27 @@ class TimetableController extends Controller
     }
 
     /**
+     * Approve and publish in one step (simplified flow)
+     */
+    public function approveAndPublish(Timetable $timetable)
+    {
+        $this->authorize('update', $timetable);
+
+        if ($timetable->entries->isEmpty()) {
+            return redirect()->back()
+                ->with('error', 'Cannot approve & publish: Timetable has no entries. Please generate entries first.');
+        }
+
+        // Mark approved and then published in one go
+        $user = auth()->user();
+        $timetable->approve($user);
+        $timetable->publish($user);
+
+        return redirect()->back()
+            ->with('success', 'Timetable approved and published successfully. It is now visible to students and lecturers.');
+    }
+
+    /**
      * Show the form for editing the specified resource.
      */
     public function edit(Timetable $timetable)

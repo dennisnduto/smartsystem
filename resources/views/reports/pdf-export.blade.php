@@ -128,7 +128,6 @@
                     <tr>
                         <th>Institution Name</th>
                         <th>Users</th>
-                        <th>Departments</th>
                         <th>Created Date</th>
                     </tr>
                 </thead>
@@ -137,7 +136,6 @@
                         <tr>
                             <td>{{ $institution->name }}</td>
                             <td>{{ $institution->users_count ?? 0 }}</td>
-                            <td>{{ $institution->departments_count ?? 0 }}</td>
                             <td>{{ $institution->created_at->format('M d, Y') }}</td>
                         </tr>
                     @endforeach
@@ -157,7 +155,6 @@
                     <tr>
                         <th>Timetable</th>
                         <th>Institution</th>
-                        <th>Department</th>
                         <th>Status</th>
                         <th>Created Date</th>
                     </tr>
@@ -166,8 +163,7 @@
                     @foreach($recent_activities as $activity)
                         <tr>
                             <td>{{ $activity->name ?? 'Unnamed' }}</td>
-                            <td>{{ $activity->department->institution->name ?? 'N/A' }}</td>
-                            <td>{{ $activity->department->name ?? 'N/A' }}</td>
+                            <td>{{ $activity->institution->name ?? 'N/A' }}</td>
                             <td>
                                 <span class="status-{{ $activity->status ?? 'draft' }}">
                                     {{ ucfirst($activity->status ?? 'draft') }}

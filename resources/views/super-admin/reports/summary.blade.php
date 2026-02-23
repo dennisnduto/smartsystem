@@ -128,7 +128,6 @@
             <div class="institution-item">
                 <div class="institution-name">{{ $institution->name }}</div>
                 <div><strong>Total Users:</strong> {{ $institution->users_count }}</div>
-                <div><strong>Departments:</strong> {{ $institution->departments_count }}</div>
                 <div><strong>Created:</strong> {{ $institution->created_at->format('M d, Y') }}</div>
                 
                 @if(isset($user_stats['by_institution'][$institution->id]))

@@ -364,14 +364,30 @@ $lecturerProfile = LecturerProfile::create([
     {
         $this->authorize('delete', $lecturer);
         
-        // Detach from courses before deletion
-        $lecturer->courses()->detach();
-        
-        // TODO: Handle timetable entries cleanup when implemented
-        
-        $lecturer->delete();
+        // Soft-deactivate instead of hard delete
+        $lecturer->update(['is_active' => false]);
 
         return redirect()->route('institution-admin.lecturers.index')
-            ->with('success', 'Lecturer deleted successfully.');
+            ->with('success', 'Lecturer deactivated successfully.');
+    }
+
+    public function deactivate(User $lecturer)
+    {
+        $this->authorize('update', $lecturer);
+
+        $lecturer->update(['is_active' => false]);
+
+        return redirect()->route('institution-admin.lecturers.index')
+            ->with('success', 'Lecturer deactivated successfully.');
+    }
+
+    public function activate(User $lecturer)
+    {
+        $this->authorize('update', $lecturer);
+
+        $lecturer->update(['is_active' => true]);
+
+        return redirect()->route('institution-admin.lecturers.index')
+            ->with('success', 'Lecturer activated successfully.');
     }
 }

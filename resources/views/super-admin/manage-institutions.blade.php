@@ -37,6 +37,7 @@
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Users</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Departments</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
@@ -47,19 +48,43 @@
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ $institution->name }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $institution->users_count ?? 0 }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $institution->departments_count ?? 0 }}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        @if($institution->is_active)
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                Active
+                                            </span>
+                                        @else
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-800">
+                                                Deactivated
+                                            </span>
+                                        @endif
+                                    </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $institution->created_at->format('M d, Y') }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <button onclick="openEditModal({{ json_encode($institution) }})" class="text-indigo-600 hover:text-indigo-900 mr-3">Edit</button>
-                                        <form method="POST" action="{{ route('super-admin.delete-institution', $institution) }}" class="inline" onsubmit="return confirm('Are you sure you want to delete this institution? This will also delete all associated users and departments.')">
+                                        @if($institution->is_active)
+                                            <form method="POST" action="{{ route('super-admin.institutions.deactivate', $institution) }}" class="inline" onsubmit="return confirm('Deactivate this institution? All its users will be deactivated too.')">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button type="submit" class="text-red-600 hover:text-red-900">Deactivate</button>
+                                            </form>
+                                        @else
+                                            <form method="POST" action="{{ route('super-admin.institutions.reactivate', $institution) }}" class="inline" onsubmit="return confirm('Reactivate this institution? (Users remain deactivated unless reactivated.)')">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button type="submit" class="text-green-700 hover:text-green-900">Reactivate</button>
+                                            </form>
+                                        @endif
+                                        <form method="POST" action="{{ route('super-admin.delete-institution', $institution) }}" class="hidden">
                                             @csrf
                                             @method('DELETE')
-                                            <button type="submit" class="text-red-600 hover:text-red-900">Delete</button>
+                                            <button type="submit">Delete</button>
                                         </form>
                                     </td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="5" class="px-6 py-4 text-center text-gray-500">No institutions found</td>
+                                    <td colspan="6" class="px-6 py-4 text-center text-gray-500">No institutions found</td>
                                 </tr>
                             @endforelse
                         </tbody>

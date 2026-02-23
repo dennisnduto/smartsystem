@@ -10,9 +10,6 @@
                 <p class="text-blue-100 mt-1">Institution Admin Dashboard</p>
             </div>
             <div class="flex space-x-3">
-                <button onclick="openGenerateTimetableModal()" class="bg-white text-blue-600 hover:bg-blue-50 font-semibold py-2 px-4 rounded-lg shadow transition">
-                    🚀 Generate Timetable
-                </button>
                 <a href="{{ route('institution-admin.analytics') }}" class="bg-blue-500 hover:bg-blue-400 text-white font-semibold py-2 px-4 rounded-lg shadow transition">
                     📊 Analytics
                 </a>
@@ -282,7 +279,7 @@
                                 <div>
                                     <p class="font-medium text-gray-900">{{ $timetable->name }}</p>
                                     <p class="text-sm text-gray-500">
-                                        {{ $timetable->department->name ?? 'Institution-wide timetable' }}
+                                        Institution-wide timetable
                                     </p>
                                 </div>
                                 <div class="text-right">
