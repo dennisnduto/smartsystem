@@ -15,7 +15,7 @@ class Timetable extends Model
         'week_start',
         'status',
         'published_at',
-        'published_by',
+'published_by',
         'approved_at',
         'approved_by',
         'semester',

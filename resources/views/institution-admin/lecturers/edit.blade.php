@@ -213,6 +213,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const isLabOnlyChecked = existingData && existingData.is_lab_only ? 'checked' : '';
         const notesValue = existingData ? (existingData.notes || '') : '';
         
+        // Initialize unit options - will be populated by refreshUnitOptions after row is added
+        let unitOptions = '<option value="">Select Unit</option>';
+        
         row.innerHTML = `
             <div class="md:col-span-4">
                 <label class="block text-sm font-medium text-gray-700">Course</label>
@@ -231,7 +234,7 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="md:col-span-2">
                 <label class="block text-sm font-medium text-gray-700">Semester</label>
                 <select name="course_assignments[${index}][semester]" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 semester-select">
-                    <option value="">Select Semester</option>
+                    <option value="">Select Semester (Optional)</option>
                     <option value="S1" ${existingData && existingData.semester==='S1' ? 'selected' : ''}>Semester 1</option>
                     <option value="S2" ${existingData && existingData.semester==='S2' ? 'selected' : ''}>Semester 2</option>
                 </select>
@@ -280,17 +283,33 @@ document.addEventListener('DOMContentLoaded', function() {
             const year = yearSelect.value;
             const semester = semesterSelect.value;
             let options = '<option value="">Select Unit</option>';
-            if (courseId && year) {
-                let units = cuy.filter(m => String(m.course_id) === String(courseId) && m.academic_year === year);
-                if (semester) units = units.filter(u => u.semester === semester);
-                if (units.length === 0) {
-                    const yearNum = /^Y(\d+)$/.test(year) ? parseInt(year.slice(1), 10) : null;
-                    let alt = allUnits;
-                    if (yearNum) alt = alt.filter(u => u.year_level === yearNum);
-                    alt.forEach(u => { options += `<option value="${u.id}">${u.code} — ${u.name}</option>`; });
-                } else {
-                    units.forEach(u => { options += `<option value="${u.unit_id}">${u.unit_code} — ${u.unit_name}</option>`; });
+            
+            if (courseId) {
+                // Get suggested units from course-unit-year mappings (for reference)
+                let suggestedUnits = cuy.filter(m => String(m.course_id) === String(courseId));
+                if (year) {
+                    suggestedUnits = suggestedUnits.filter(u => u.academic_year === year);
                 }
+                if (semester) {
+                    suggestedUnits = suggestedUnits.filter(u => u.semester === semester);
+                }
+                const suggestedUnitIds = new Set(suggestedUnits.map(u => String(u.unit_id)));
+                
+                // Show ALL units from the institution, optionally filtered by year level
+                let availableUnits = allUnits;
+                if (year) {
+                    const yearNum = /^Y(\d+)$/.test(year) ? parseInt(year.slice(1), 10) : null;
+                    if (yearNum) {
+                        availableUnits = availableUnits.filter(u => u.year_level === yearNum);
+                    }
+                }
+                
+                // Add all available units to options
+                availableUnits.forEach(u => {
+                    const isSuggested = suggestedUnitIds.has(String(u.id));
+                    const label = `${u.code} — ${u.name}${isSuggested ? ' (suggested)' : ''}`;
+                    options += `<option value="${u.id}">${label}</option>`;
+                });
             }
             unitSelect.innerHTML = options;
             if (existingData && existingData.unit_id) {

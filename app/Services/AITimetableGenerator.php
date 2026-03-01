@@ -46,8 +46,7 @@ class AITimetableGenerator
                 'u.id as user_id',
                 'u.name as lecturer_name',
                 'u.lecturer_id',
-                'cuyu.is_lab_only',
-                'L.availability'
+                'cuyu.is_lab_only'
             )
             ->get();
 
@@ -57,11 +56,7 @@ class AITimetableGenerator
 
         // Load rooms for institution
         $rooms = DB::table('rooms as r')
-            ->leftJoin('departments as d', 'd.id', '=', 'r.department_id')
-            ->when($timetable->institution_id, fn($q) => $q->where(function($subq) use ($timetable) {
-                $subq->where('d.institution_id', $timetable->institution_id)
-                     ->orWhereNull('r.department_id');
-            }))
+            ->when($timetable->institution_id, fn($q) => $q->where('r.institution_id', $timetable->institution_id))
             ->select('r.id', 'r.name', 'r.capacity', 'r.room_type')
             ->get();
 

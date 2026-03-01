@@ -107,38 +107,52 @@ class ConflictDetector
     private function detectAvailabilityViolations(Timetable $timetable): Collection
     {
         $violations = collect();
-        
+
+        // Load entries and associated lecturer user
         $entries = $timetable->entries()->with(['lecturer'])->get();
-        
+
+        if ($entries->isEmpty()) {
+            return $violations;
+        }
+
+        // Build a lookup of lecturer availability from lecturer_availability table
+        $lecturerIds = $entries->pluck('lecturer_id')->filter()->unique();
+        if ($lecturerIds->isEmpty()) {
+            return $violations;
+        }
+
+        $availabilityRows = \App\Models\LecturerAvailability::whereIn('lecturer_id', $lecturerIds)->get();
+        $availabilityMatrix = [];
+        foreach ($availabilityRows as $row) {
+            $availabilityMatrix[(int) $row->lecturer_id][(int) $row->day][(int) $row->slot] = $row->status;
+        }
+
         foreach ($entries as $entry) {
-            if (!$entry->lecturer || !$entry->lecturer->availability) {
+            if (!$entry->lecturer || !$entry->lecturer_id) {
                 continue;
             }
-            
-            try {
-                $availability = json_decode($entry->lecturer->availability, true);
-                if (!is_array($availability)) continue;
-                
-                $dayAvailability = $availability[(string)$entry->day_of_week] ?? $availability[$entry->day_of_week] ?? [];
-                
-                if (is_array($dayAvailability) && !in_array($entry->slot, $dayAvailability)) {
-                    $violations->push([
-                        'type' => 'availability_violation',
-                        'lecturer_id' => $entry->lecturer_id,
-                        'lecturer_name' => $entry->lecturer->name,
-                        'day' => $entry->day_of_week,
-                        'slot' => $entry->slot,
-                        'available_slots' => $dayAvailability,
-                        'entry' => $entry,
-                        'severity' => 'medium'
-                    ]);
-                }
-            } catch (\Exception $e) {
-                // Skip if availability format is invalid
-                continue;
+
+            $lecturerId = (int) $entry->lecturer_id;
+            $day = (int) $entry->day_of_week;
+            $slot = (int) $entry->slot;
+
+            $status = $availabilityMatrix[$lecturerId][$day][$slot] ?? null;
+
+            // IF no row or status != available, it is a violation
+            if ($status !== 'available') {
+                $violations->push([
+                    'type' => 'availability_violation',
+                    'lecturer_id' => $lecturerId,
+                    'lecturer_name' => $entry->lecturer->name ?? 'Unknown',
+                    'day' => $day,
+                    'slot' => $slot,
+                    'status' => $status ?? 'unavailable',
+                    'entry' => $entry,
+                    'severity' => 'medium',
+                ]);
             }
         }
-        
+
         return $violations;
     }
     

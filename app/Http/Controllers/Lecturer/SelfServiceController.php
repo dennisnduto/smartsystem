@@ -6,44 +6,29 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\TimetableEntry;
+use App\Models\LecturerAvailability;
 
 class SelfServiceController extends Controller
 {
     public function timetable(Request $request)
     {
         $user = $request->user();
-        // Load today's and upcoming entries for this lecturer (only from approved/published timetables)
+        // Load entries for this lecturer from published timetables only
         $entries = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
             ->where('lecturer_id', $user->lecturer_id)
             ->whereHas('timetable', function($q) {
-                $q->whereIn('status', ['approved', 'published']);
+                $q->where('status', 'published');
             })
             ->orderBy('day_of_week')
             ->orderBy('slot')
             ->get();
-        // Load saved availability from lecturers table (JSON)
+        // Load availability from lecturer_availability table
+        $availabilityRows = LecturerAvailability::where('lecturer_id', $user->lecturer_id)->get();
         $availability = [];
-        $lect = DB::table('lecturers')->where('id', $user->lecturer_id)->first();
-        if ($lect && !empty($lect->availability)) {
-            $decoded = json_decode($lect->availability, true);
-            if (is_array($decoded)) { $availability = $decoded; }
+        foreach ($availabilityRows as $row) {
+            $availability[(int) $row->day][(int) $row->slot] = $row->status;
         }
-        // If no saved availability, prefill a default template (all Free)
-        if (empty($availability)) {
-            for ($day = 1; $day <= 5; $day++) {
-                for ($slot = 1; $slot <= 4; $slot++) {
-                    $availability[$day][$slot] = true; // Free by default
-                }
-            }
-        }
-        // Auto-mark BUSY where there are scheduled classes (override Free)
-        foreach ($entries as $e) {
-            $d = (int)($e->day_of_week ?? 0);
-            $s = (int)($e->slot ?? 0);
-            if ($d >= 1 && $d <= 5 && $s >= 1 && $s <= 4) {
-                $availability[$d][$s] = false; // Busy where teaching
-            }
-        }
+
         // Group by day for week-at-a-glance cards
         $entriesByDay = $entries->groupBy('day_of_week')->map(function($col) {
             return $col->sortBy('slot')->values();
@@ -52,19 +37,49 @@ class SelfServiceController extends Controller
         return view('lecturer.timetable', compact('entries', 'entriesByDay', 'availability', 'user'));
     }
 
-    public function updateAvailability(Request $request)
+    public function toggleAvailability(Request $request)
     {
         $user = $request->user();
         $data = $request->validate([
-            'availability' => 'required|array',
+            'day' => 'required|integer|min:1|max:5',
+            'slot' => 'required|integer|min:1|max:4',
         ]);
 
-        DB::table('lecturers')->where('id', $user->lecturer_id)->update([
-            'availability' => json_encode($data['availability']),
-            'updated_at' => now(),
-        ]);
+        $lecturerId = $user->lecturer_id;
+        $day = (int) $data['day'];
+        $slot = (int) $data['slot'];
 
-        return back()->with('success', 'Availability updated');
+        $record = LecturerAvailability::where('lecturer_id', $lecturerId)
+            ->where('day', $day)
+            ->where('slot', $slot)
+            ->first();
+
+        // auto_busy slots are locked (scheduled classes)
+        if ($record && $record->status === 'auto_busy') {
+            return response()->json([
+                'status' => $record->status,
+                'locked' => true,
+            ]);
+        }
+
+        if (!$record) {
+            // No row -> currently unavailable; first toggle makes it explicitly available
+            $record = LecturerAvailability::create([
+                'lecturer_id' => $lecturerId,
+                'day' => $day,
+                'slot' => $slot,
+                'status' => 'available',
+            ]);
+        } else {
+            // Toggle between available and busy
+            $record->status = $record->status === 'available' ? 'busy' : 'available';
+            $record->save();
+        }
+
+        return response()->json([
+            'status' => $record->status,
+            'locked' => $record->status === 'auto_busy',
+        ]);
     }
 
     public function assigned(Request $request)

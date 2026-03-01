@@ -68,13 +68,46 @@ class StudentController extends Controller
             return $col->sortBy('slot')->values();
         });
 
-        // Get active timetables (approved or published)
+        // Get published timetables for student's institution
         $timetables = Timetable::where('institution_id', $user->institution_id)
-            ->whereIn('status', ['approved', 'published'])
+            ->where('status', 'published')
             ->latest()
             ->get();
 
         return view('student.timetable', compact('entries', 'entriesByDay', 'timetables', 'user'));
+    }
+
+    /**
+     * View full institution timetable (all courses, published only)
+     */
+    public function fullTimetable(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user->is_approved) {
+            return redirect()->route('student.dashboard')->with('error', 'Your account is pending approval.');
+        }
+
+        // All published entries for this institution
+        $entries = TimetableEntry::with(['unit', 'course', 'room', 'lecturer', 'timetable'])
+            ->whereHas('timetable', function ($q) use ($user) {
+                $q->where('institution_id', $user->institution_id)
+                  ->where('status', 'published');
+            })
+            ->orderBy('day_of_week')
+            ->orderBy('slot')
+            ->get();
+
+        $entriesByDay = $entries->groupBy('day_of_week')->map(function ($col) {
+            return $col->sortBy('slot')->values();
+        });
+
+        $timetables = Timetable::where('institution_id', $user->institution_id)
+            ->where('status', 'published')
+            ->latest()
+            ->get();
+
+        return view('student.timetable-full', compact('entries', 'entriesByDay', 'timetables', 'user'));
     }
 
     /**
@@ -177,7 +210,7 @@ class StudentController extends Controller
                 ->where('slot', $slot)
                 ->whereHas('timetable', function($q) use ($user) {
                     $q->where('institution_id', $user->institution_id)
-                      ->whereIn('status', ['approved', 'published']);
+                      ->where('status', 'published');
                 })
                 ->pluck('room_id');
 
@@ -219,19 +252,19 @@ class StudentController extends Controller
         // "Who teaches SIT401?" or similar unit code queries
         if (preg_match('/who\s+teaches\s+([A-Z0-9]+)/i', $query, $matches)) {
             $unitCode = strtoupper($matches[1] ?? '');
-            $unit = Unit::where('code', $unitCode)
-                ->whereHas('timetableEntries.timetable', function($q) use ($user) {
-                    $q->where('institution_id', $user->institution_id)
-                      ->where('status', 'published');
-                })
-                ->first();
+                $unit = Unit::where('code', $unitCode)
+                    ->whereHas('timetableEntries.timetable', function($q) use ($user) {
+                        $q->where('institution_id', $user->institution_id)
+                          ->where('status', 'published');
+                    })
+                    ->first();
 
             if ($unit) {
                 // Get lecturers teaching this unit
                 $lecturers = TimetableEntry::where('unit_id', $unit->id)
                     ->whereHas('timetable', function($q) use ($user) {
                         $q->where('institution_id', $user->institution_id)
-                          ->whereIn('status', ['approved', 'published']);
+                          ->where('status', 'published');
                     })
                     ->with('lecturer')
                     ->get()
@@ -295,11 +328,11 @@ class StudentController extends Controller
         $courseIds = $user->courses()->pluck('courses.id');
 
         // Get timetable entries for student's courses/units
-        // Filter by approved/published timetables only
+        // Filter by published timetables only
         $query = TimetableEntry::with(['unit', 'course', 'room', 'lecturer', 'timetable'])
             ->whereHas('timetable', function($q) use ($user) {
                 $q->where('institution_id', $user->institution_id)
-                  ->whereIn('status', ['approved', 'published']);
+                  ->where('status', 'published');
             })
             ->where(function($q) use ($courseUnitYearIds, $courseIds) {
                 // Match by course_unit_year (through teaching groups or direct course/unit match)

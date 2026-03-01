@@ -162,7 +162,7 @@ Route::middleware(['auth', 'institution.admin'])->prefix('institution-admin')->n
 Route::middleware(['auth'])->prefix('lecturer')->name('lecturer.')->group(function () {
     Route::get('dashboard', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'timetable'])->name('dashboard');
     Route::get('timetable', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'timetable'])->name('timetable');
-    Route::post('availability', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'updateAvailability'])->name('availability.update');
+    Route::post('availability/toggle', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'toggleAvailability'])->name('availability.toggle');
     Route::get('assigned', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'assigned'])->name('assigned');
     Route::get('rooms', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'rooms'])->name('rooms');
     Route::post('schedule-change', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'requestChange'])->name('schedule.change');
@@ -176,6 +176,7 @@ Route::middleware(['auth'])->prefix('lecturer')->name('lecturer.')->group(functi
 Route::middleware(['auth'])->prefix('student')->name('student.')->group(function () {
     Route::get('dashboard', [App\Http\Controllers\Student\StudentController::class, 'dashboard'])->name('dashboard');
     Route::get('timetable', [App\Http\Controllers\Student\StudentController::class, 'timetable'])->name('timetable');
+    Route::get('timetable/full', [App\Http\Controllers\Student\StudentController::class, 'fullTimetable'])->name('timetable.full');
     Route::get('rooms', [App\Http\Controllers\Student\StudentController::class, 'rooms'])->name('rooms');
     Route::post('chatbot', [App\Http\Controllers\Student\StudentController::class, 'chatbot'])->name('chatbot');
     Route::get('timetable/print', [App\Http\Controllers\Student\StudentController::class, 'printTimetable'])->name('timetable.print');

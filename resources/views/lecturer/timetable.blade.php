@@ -73,44 +73,60 @@
         <div class="flex items-center gap-2 text-[11px] text-gray-500">
           <span class="inline-flex items-center gap-1"><span class="legend legend-free"></span> Free</span>
           <span class="inline-flex items-center gap-1"><span class="legend legend-busy"></span> Busy</span>
+          <span class="inline-flex items-center gap-1"><span class="legend legend-auto"></span> Class</span>
         </div>
       </div>
-      <form method="POST" action="{{ route('lecturer.availability.update') }}">
-        @csrf
-        <div class="overflow-auto">
-          <table class="min-w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
-            @php $daysFull = [1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri']; @endphp
-            <thead>
-              <tr class="bg-gray-50">
-                <th class="p-2 text-left font-semibold text-gray-600 border-b border-r">Slot</th>
-                @foreach($daysFull as $d)
-                  <th class="p-2 text-left font-semibold text-gray-600 border-b border-r">{{ $d }}</th>
-                @endforeach
+      <div class="overflow-auto">
+        <table class="min-w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
+          @php $daysFull = [1=>'Mon',2=>'Tue',3=>'Wed',4=>'Thu',5=>'Fri']; @endphp
+          <thead>
+            <tr class="bg-gray-50">
+              <th class="p-2 text-left font-semibold text-gray-600 border-b border-r">Slot</th>
+              @foreach($daysFull as $d)
+                <th class="p-2 text-left font-semibold text-gray-600 border-b border-r">{{ $d }}</th>
+              @endforeach
+            </tr>
+          </thead>
+          <tbody>
+            @for($slot=1;$slot<=4;$slot++)
+              <tr class="border-t">
+                <td class="p-2 font-medium text-gray-700 border-r">{{ ['7-10','10-13','13-16','16-19'][$slot-1] }}</td>
+                @for($day=1;$day<=5;$day++)
+                  @php
+                    $status = $availability[$day][$slot] ?? 'busy'; // default: unavailable/busy
+                    $isFree = $status === 'available';
+                    $isBusy = $status === 'busy';
+                    $isAuto = $status === 'auto_busy';
+                  @endphp
+                  <td class="p-2 border-r">
+                    <button
+                      type="button"
+                      class="avail-cell {{ $isFree ? 'is-free' : '' }} {{ $isBusy ? 'is-busy' : '' }} {{ $isAuto ? 'is-auto-busy' : '' }}"
+                      data-day="{{ $day }}"
+                      data-slot="{{ $slot }}"
+                      data-status="{{ $status }}"
+                      @if($isAuto) disabled @endif
+                    >
+                      <span class="avail-label">
+                        @if($isAuto)
+                          Class
+                        @elseif($isFree)
+                          Free
+                        @else
+                          Busy
+                        @endif
+                      </span>
+                    </button>
+                  </td>
+                @endfor
               </tr>
-            </thead>
-            <tbody>
-              @for($slot=1;$slot<=4;$slot++)
-                <tr class="border-t">
-                  <td class="p-2 font-medium text-gray-700 border-r">{{ ['7-10','10-13','13-16','16-19'][$slot-1] }}</td>
-                  @for($day=1;$day<=5;$day++)
-                    @php $isFree = ($availability[$day][$slot] ?? false) ? true : false; @endphp
-                    <td class="p-2 border-r">
-                      <label class="avail-cell {{ $isFree ? 'is-free' : 'is-busy' }}">
-                        <input type="checkbox" name="availability[{{ $day }}][{{ $slot }}]" value="1" {{ $isFree ? 'checked' : '' }} class="avail-checkbox">
-                        <span class="avail-label">{{ $isFree ? 'Free' : 'Busy' }}</span>
-                      </label>
-                    </td>
-                  @endfor
-                </tr>
-              @endfor
-            </tbody>
-          </table>
-        </div>
-        <div class="mt-3 flex items-center justify-between">
-          <div class="text-[10px] text-gray-500">Tip: Click a cell to toggle. Your scheduled classes are auto-marked Busy.</div>
-          <button class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded shadow">Save</button>
-        </div>
-      </form>
+            @endfor
+          </tbody>
+        </table>
+      </div>
+      <div class="mt-3 text-[10px] text-gray-500">
+        Click a cell to toggle between Free and Busy. Slots with an active class are locked.
+      </div>
     </div>
   </div>
 
@@ -174,13 +190,64 @@
     #lecturer-availability .legend { width: 10px; height: 10px; border-radius: 9999px; display: inline-block; }
     #lecturer-availability .legend-free { background: #ecfdf5; border: 1px solid #10b98155; }
     #lecturer-availability .legend-busy { background: #fef2f2; border: 1px solid #ef444455; }
+    #lecturer-availability .legend-auto { background: #e5e7eb; border: 1px solid #9ca3af55; }
 
     #lecturer-availability .avail-cell { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s; user-select: none; }
     #lecturer-availability .avail-cell.is-free { background: #ecfdf5; border-color: #10b98155; color: #065f46; }
     #lecturer-availability .avail-cell.is-busy { background: #fef2f2; border-color: #ef444455; color: #7f1d1d; }
+    #lecturer-availability .avail-cell.is-auto-busy { background: #e5e7eb; border-color: #9ca3af55; color: #374151; cursor: not-allowed; opacity: 0.8; }
     #lecturer-availability .avail-cell:hover { box-shadow: 0 1px 0 rgba(0,0,0,0.04); }
-    #lecturer-availability .avail-checkbox { height: 16px; width: 16px; accent-color: #10b981; }
     #lecturer-availability .avail-label { font-size: 11px; font-weight: 700; }
   </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const csrf = '{{ csrf_token() }}';
+      const cells = document.querySelectorAll('#lecturer-availability .avail-cell');
+
+      cells.forEach(cell => {
+        cell.addEventListener('click', async function () {
+          if (this.disabled || this.classList.contains('is-auto-busy')) {
+            return;
+          }
+
+          const day = this.getAttribute('data-day');
+          const slot = this.getAttribute('data-slot');
+
+          try {
+            const res = await fetch('{{ route('lecturer.availability.toggle') }}', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrf,
+                'Accept': 'application/json',
+              },
+              body: JSON.stringify({ day, slot }),
+            });
+
+            if (!res.ok) return;
+            const data = await res.json();
+            const status = data.status;
+
+            this.classList.remove('is-free', 'is-busy', 'is-auto-busy');
+            this.removeAttribute('disabled');
+
+            if (status === 'available') {
+              this.classList.add('is-free');
+              this.querySelector('.avail-label').textContent = 'Free';
+            } else if (status === 'busy') {
+              this.classList.add('is-busy');
+              this.querySelector('.avail-label').textContent = 'Busy';
+            } else if (status === 'auto_busy') {
+              this.classList.add('is-auto-busy');
+              this.querySelector('.avail-label').textContent = 'Class';
+              this.setAttribute('disabled', 'disabled');
+            }
+          } catch (e) {
+            console.error('Availability update failed', e);
+          }
+        });
+      });
+    });
+  </script>
 </div>
 </x-app-layout>

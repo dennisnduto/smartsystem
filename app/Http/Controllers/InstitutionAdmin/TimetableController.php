@@ -110,45 +110,117 @@ class TimetableController extends Controller
     public function generateEntries(Timetable $timetable, AITimetableGenerator $aiGenerator)
     {
         $this->authorize('update', $timetable);
+
+        $institutionId = $timetable->institution_id;
+        
+        // Check if there are any lecturer-unit assignments for this institution
+        // Just do a basic check - the generator will handle the actual filtering
+        $totalAssignments = \Illuminate\Support\Facades\DB::table('course_unit_year as cuy')
+            ->join('course_unit_year_user as cuyu', 'cuyu.course_unit_year_id', '=', 'cuy.id')
+            ->join('users as u', 'u.id', '=', 'cuyu.user_id')
+            ->where('u.institution_id', $institutionId)
+            ->count();
+        
+        if ($totalAssignments === 0) {
+            return redirect()->back()->with('error', 
+                'No lecturer-unit assignments found in your institution. Please assign units to lecturers first.'
+            );
+        }
+        
+        // Log conversion for debugging (but don't block generation)
+        $generator = new TimetableGenerator();
+        $convertedAcademicYear = $generator->convertAcademicYear($timetable->academic_year);
+        $convertedSemester = $generator->convertSemester($timetable->semester);
+        
+        \Log::info('Timetable generation starting', [
+            'timetable_id' => $timetable->id,
+            'timetable_year' => $timetable->academic_year,
+            'timetable_semester' => $timetable->semester,
+            'converted_year' => $convertedAcademicYear,
+            'converted_semester' => $convertedSemester,
+            'total_assignments' => $totalAssignments
+        ]);
+
+        // Ensure all lecturers for this institution have submitted availability
+        $lecturerIds = \Illuminate\Support\Facades\DB::table('users')
+            ->where('institution_id', $institutionId)
+            ->where('role', 'lecturer')
+            ->whereNotNull('lecturer_id')
+            ->pluck('lecturer_id')
+            ->unique()
+            ->values();
+
+        if ($lecturerIds->isNotEmpty()) {
+            $withAvailability = \App\Models\LecturerAvailability::whereIn('lecturer_id', $lecturerIds)
+                ->select('lecturer_id')
+                ->distinct()
+                ->pluck('lecturer_id');
+
+            $missing = $lecturerIds->diff($withAvailability);
+
+            if ($missing->isNotEmpty()) {
+                $names = \App\Models\Lecturer::whereIn('id', $missing)->pluck('name')->implode(', ');
+                return redirect()->back()->with('error', 'Cannot generate timetable. The following lecturers have not filled their availability: ' . $names);
+            }
+        }
         
         $before = $timetable->entries()->count();
 
-        try {
-            // Try AI generation first
-            $aiGenerator->generateForTimetable($timetable);
-            
-            // Refresh the timetable to get updated entries count
-            $timetable->refresh();
-            $after = $timetable->entries()->count();
-            $added = $after - $before;
-            
-            if ($added > 0) {
-                return redirect()->route('institution-admin.timetables.show', $timetable)
-                    ->with('success', "AI generated $added entries successfully!");
-            } else {
-                // Fallback to rule-based generation
-                $fallbackGenerator = new TimetableGenerator();
-                $fallbackGenerator->generateForTimetable($timetable);
+        // Check if OpenAI API key is configured
+        $apiKey = config('services.openai.key');
+        $useAI = !empty($apiKey);
+
+        if ($useAI) {
+            // Try AI generation first if API key is available
+            try {
+                $aiGenerator->generateForTimetable($timetable);
                 
                 $timetable->refresh();
                 $after = $timetable->entries()->count();
                 $added = $after - $before;
                 
-                return redirect()->route('institution-admin.timetables.show', $timetable)
-                    ->with('warning', "AI generation failed. Used fallback method. Generated $added entries.");
+                if ($added > 0) {
+                    return redirect()->route('institution-admin.timetables.show', $timetable)
+                        ->with('success', "AI generated $added entries successfully!");
+                } else {
+                    // AI returned 0 entries, fall back to rule-based
+                    \Log::info('AI generation returned 0 entries, falling back to rule-based generator');
+                    $useAI = false; // Will use rule-based below
+                }
+            } catch (\Exception $e) {
+                \Log::warning('AI generation failed, using rule-based generator: ' . $e->getMessage());
+                $useAI = false; // Will use rule-based below
             }
-            
-        } catch (\Exception $e) {
-            // Fallback to rule-based generation on error
-            $fallbackGenerator = new TimetableGenerator();
-            $fallbackGenerator->generateForTimetable($timetable);
+        }
+
+        // Use rule-based TimetableGenerator (primary method or fallback)
+        try {
+            $generator = new TimetableGenerator();
+            $generator->generateForTimetable($timetable);
             
             $timetable->refresh();
             $after = $timetable->entries()->count();
             $added = $after - $before;
             
+            if ($added > 0) {
+                $message = $useAI 
+                    ? "AI generation failed. Generated $added entries using rule-based method."
+                    : "Generated $added entries successfully!";
+                    
+                return redirect()->route('institution-admin.timetables.show', $timetable)
+                    ->with('success', $message);
+            } else {
+                return redirect()->route('institution-admin.timetables.show', $timetable)
+                    ->with('error', 'Generation completed but no entries were created. Please check that lecturers have units assigned and availability set.');
+            }
+        } catch (\Exception $e) {
+            \Log::error('Timetable generation error: ' . $e->getMessage(), [
+                'exception' => $e,
+                'timetable_id' => $timetable->id
+            ]);
+            
             return redirect()->route('institution-admin.timetables.show', $timetable)
-                ->with('warning', "AI generation failed: {$e->getMessage()}. Used fallback method. Generated $added entries.");
+                ->with('error', "Generation failed: {$e->getMessage()}. Please check your lecturer assignments and availability.");
         }
     }
 

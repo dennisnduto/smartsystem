@@ -47,12 +47,14 @@ $courseUnitYears = CourseUnitYear::with(['course.department','unit'])
             ->whereHas('course.department', function($q) use ($institution) {
                 $q->where('institution_id', $institution->id);
             })->get();
-        $cuyForJs = $courseUnitYears->map(function($m) {
+        $cuyForJs = $courseUnitYears->filter(function($m) {
+            return $m->unit !== null; // Only include mappings with valid units
+        })->map(function($m) {
             return [
                 'course_id' => $m->course_id,
                 'unit_id' => $m->unit_id,
-                'unit_code' => $m->unit->code,
-                'unit_name' => $m->unit->name,
+                'unit_code' => $m->unit->code ?? '',
+                'unit_name' => $m->unit->name ?? '',
                 'academic_year' => $m->academic_year,
                 'semester' => $m->semester,
             ];
@@ -89,7 +91,7 @@ $courseUnitYears = CourseUnitYear::with(['course.department','unit'])
             'course_assignments.*.course_id' => 'required|exists:courses,id',
             'course_assignments.*.unit_id' => 'required|exists:units,id',
 'course_assignments.*.academic_year' => 'required|in:Y1,Y2,Y3,Y4,Y5',
-            'course_assignments.*.semester' => 'required|in:S1,S2',
+            'course_assignments.*.semester' => 'nullable|in:S1,S2',
             'course_assignments.*.is_lab_only' => 'boolean',
             'course_assignments.*.notes' => 'nullable|string|max:500'
         ]);
@@ -144,9 +146,10 @@ $lecturerProfile = LecturerProfile::create([
                         'semester' => $assignment['semester'] ?? null,
                     ]);
                 } else {
-                    // Ensure semester is set if provided
-                    if (!empty($assignment['semester']) && $cuy->semester !== $assignment['semester']) {
-                        $cuy->semester = $assignment['semester'];
+                    // Update semester if changed (allow clearing by setting to null)
+                    $newSemester = !empty($assignment['semester']) ? $assignment['semester'] : null;
+                    if ($cuy->semester !== $newSemester) {
+                        $cuy->semester = $newSemester;
                         $cuy->save();
                     }
                 }
@@ -218,12 +221,14 @@ $lecturerProfile = LecturerProfile::create([
             ->whereHas('course.department', function($q) use ($institution) {
                 $q->where('institution_id', $institution->id);
             })->get();
-        $cuyForJs = $courseUnitYears->map(function($m) {
+        $cuyForJs = $courseUnitYears->filter(function($m) {
+            return $m->unit !== null; // Only include mappings with valid units
+        })->map(function($m) {
             return [
                 'course_id' => $m->course_id,
                 'unit_id' => $m->unit_id,
-                'unit_code' => optional($m->unit)->code,
-                'unit_name' => optional($m->unit)->name,
+                'unit_code' => $m->unit->code ?? '',
+                'unit_name' => $m->unit->name ?? '',
                 'academic_year' => $m->academic_year,
                 'semester' => $m->semester,
             ];
@@ -276,7 +281,7 @@ $lecturerProfile = LecturerProfile::create([
             'course_assignments.*.course_id' => 'required|exists:courses,id',
             'course_assignments.*.unit_id' => 'required|exists:units,id',
 'course_assignments.*.academic_year' => 'required|in:Y1,Y2,Y3,Y4,Y5',
-            'course_assignments.*.semester' => 'required|in:S1,S2',
+            'course_assignments.*.semester' => 'nullable|in:S1,S2',
             'course_assignments.*.is_lab_only' => 'boolean',
             'course_assignments.*.notes' => 'nullable|string|max:500'
         ]);
@@ -325,8 +330,10 @@ $lecturerProfile = LecturerProfile::create([
                         'semester' => $assignment['semester'] ?? null,
                     ]);
                 } else {
-                    if (!empty($assignment['semester']) && $cuy->semester !== $assignment['semester']) {
-                        $cuy->semester = $assignment['semester'];
+                    // Update semester if changed (allow clearing by setting to null)
+                    $newSemester = !empty($assignment['semester']) ? $assignment['semester'] : null;
+                    if ($cuy->semester !== $newSemester) {
+                        $cuy->semester = $newSemester;
                         $cuy->save();
                     }
                 }

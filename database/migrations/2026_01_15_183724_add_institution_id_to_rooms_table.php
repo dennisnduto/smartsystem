@@ -11,10 +11,10 @@ return new class extends Migration
     {
         // Check if column already exists
         if (!Schema::hasColumn('rooms', 'institution_id')) {
-            Schema::table('rooms', function (Blueprint $table) {
+        Schema::table('rooms', function (Blueprint $table) {
                 $table->foreignId('institution_id')->nullable()->after('department_id')->constrained()->cascadeOnDelete();
-            });
-        }
+        });
+    }
 
         // Populate institution_id from department relationship
         DB::statement('

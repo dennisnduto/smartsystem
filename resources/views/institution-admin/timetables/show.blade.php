@@ -78,21 +78,21 @@
   <!-- View Toggle -->
   <div class="mb-6 flex justify-center">
     <div class="bg-gray-100 rounded-lg p-1 inline-flex">
-      <button id="standard-view" onclick="toggleView('standard')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm">
+      <button id="standard-view" onclick="toggleView('standard')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:text-gray-900">
         Standard View
       </button>
-      <button id="grouped-view" onclick="toggleView('grouped')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:text-gray-900">
-        Course Grouped View
+      <button id="grouped-view" onclick="toggleView('grouped')" class="px-4 py-2 rounded-md text-sm font-medium transition-colors bg-white text-gray-900 shadow-sm">
+        Course & Year Grouped View
       </button>
     </div>
   </div>
 
   <!-- Timetable Views -->
-  <div id="standard-timetable">
+  <div id="standard-timetable" style="display: none;">
     <x-timetable-grid :timetable="$timetable" />
   </div>
   
-  <div id="grouped-timetable" style="display: none;">
+  <div id="grouped-timetable">
     <x-timetable-grid-grouped :timetable="$timetable" />
   </div>
 </div>
