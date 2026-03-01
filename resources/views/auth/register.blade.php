@@ -62,6 +62,21 @@
             <p class="mt-1 text-sm text-gray-600">Select your course to view your timetable</p>
         </div>
 
+        <!-- Year of Study Selection -->
+        <div class="mt-4">
+            <x-input-label for="year_of_study" :value="__('Year of Study')" />
+            <select id="year_of_study" name="year_of_study" class="block mt-1 w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required>
+                <option value="">Select Year of Study</option>
+                <option value="Y1" {{ old('year_of_study') == 'Y1' ? 'selected' : '' }}>Year 1</option>
+                <option value="Y2" {{ old('year_of_study') == 'Y2' ? 'selected' : '' }}>Year 2</option>
+                <option value="Y3" {{ old('year_of_study') == 'Y3' ? 'selected' : '' }}>Year 3</option>
+                <option value="Y4" {{ old('year_of_study') == 'Y4' ? 'selected' : '' }}>Year 4</option>
+                <option value="Y5" {{ old('year_of_study') == 'Y5' ? 'selected' : '' }}>Year 5</option>
+            </select>
+            <x-input-error :messages="$errors->get('year_of_study')" class="mt-2" />
+            <p class="mt-1 text-sm text-gray-600">Select your current year of study to facilitate timetable fetching</p>
+        </div>
+
         <!-- School ID Upload -->
         <div class="mt-4">
             <x-input-label for="school_id" :value="__('School ID (Upload)')" />

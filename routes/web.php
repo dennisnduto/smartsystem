@@ -51,50 +51,6 @@ Route::middleware(['auth'])->prefix('super-admin')->name('super-admin.')->group(
     // Deactivation for admins (replaces hard delete in UI)
     Route::patch('/admins/{admin}/deactivate', [SuperAdminController::class, 'deactivateAdmin'])->name('admins.deactivate');
     Route::patch('/admins/{admin}/reactivate', [SuperAdminController::class, 'reactivateAdmin'])->name('admins.reactivate');
-    
-    // Test route
-    Route::get('/test', function() {
-        return view('super-admin.dashboard-test', [
-            'stats' => [
-                'total_institutions' => 1,
-                'total_admins' => 1,
-                'total_timetables' => 0,
-                'total_users' => 2
-            ],
-            'recent_institutions' => collect([]),
-            'recent_admins' => collect([])
-        ]);
-    })->name('test');
-    
-    // Super simple test
-    Route::get('/simple-test', function() {
-        return view('simple-test', [
-            'stats' => [
-                'total_institutions' => 1,
-                'total_admins' => 1
-            ]
-        ]);
-    })->name('simple-test');
-    
-    // Debug dashboard test
-    Route::get('/debug', function() {
-        $stats = [
-            'total_institutions' => 2,
-            'total_admins' => 3,
-            'total_users' => 10,
-            'total_timetables' => 5,
-        ];
-        
-        $recent_institutions = collect([
-            (object)['name' => 'Test University', 'users_count' => 100, 'departments_count' => 5, 'created_at' => now()]
-        ]);
-        
-        $recent_admins = collect([
-            (object)['name' => 'John Admin', 'institution' => (object)['name' => 'Test Uni'], 'created_at' => now()]
-        ]);
-        
-        return view('super-admin.dashboard', compact('stats', 'recent_institutions', 'recent_admins'));
-    })->name('debug');
 });
 
 // Institution Admin Routes
@@ -167,6 +123,8 @@ Route::middleware(['auth'])->prefix('lecturer')->name('lecturer.')->group(functi
     Route::get('rooms', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'rooms'])->name('rooms');
     Route::post('schedule-change', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'requestChange'])->name('schedule.change');
     Route::post('chatbot', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'chatbot'])->name('chatbot');
+    Route::get('export/csv', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'exportCSV'])->name('export.csv');
+    Route::get('export/pdf', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'exportPDF'])->name('export.pdf');
     
     // Room bookings
     Route::resource('room-bookings', App\Http\Controllers\Lecturer\RoomBookingController::class);
@@ -180,6 +138,7 @@ Route::middleware(['auth'])->prefix('student')->name('student.')->group(function
     Route::get('rooms', [App\Http\Controllers\Student\StudentController::class, 'rooms'])->name('rooms');
     Route::post('chatbot', [App\Http\Controllers\Student\StudentController::class, 'chatbot'])->name('chatbot');
     Route::get('timetable/print', [App\Http\Controllers\Student\StudentController::class, 'printTimetable'])->name('timetable.print');
+    Route::put('profile', [App\Http\Controllers\Student\StudentController::class, 'updateProfile'])->name('profile.update');
     
     // Room booking requests
     Route::resource('room-requests', App\Http\Controllers\Student\RoomRequestController::class);

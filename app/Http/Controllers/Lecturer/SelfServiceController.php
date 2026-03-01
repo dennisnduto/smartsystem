@@ -5,14 +5,23 @@ namespace App\Http\Controllers\Lecturer;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\View;
 use App\Models\TimetableEntry;
 use App\Models\LecturerAvailability;
+use App\Services\AIChatbotService;
 
 class SelfServiceController extends Controller
 {
     public function timetable(Request $request)
     {
         $user = $request->user();
+        
+        // Check if user has lecturer_id
+        if (!$user->lecturer_id) {
+            return redirect()->route('dashboard')
+                ->with('error', 'You are not assigned as a lecturer. Please contact your administrator.');
+        }
+        
         // Load entries for this lecturer from published timetables only
         $entries = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
             ->where('lecturer_id', $user->lecturer_id)
@@ -29,12 +38,51 @@ class SelfServiceController extends Controller
             $availability[(int) $row->day][(int) $row->slot] = $row->status;
         }
 
-        // Group by day for week-at-a-glance cards
-        $entriesByDay = $entries->groupBy('day_of_week')->map(function($col) {
+        
+        // Count lab sessions for this lecturer (units scheduled in lab rooms)
+        try {
+            $labCount = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
+                ->where('lecturer_id', $user->lecturer_id)
+                ->whereHas('timetable', function($q) {
+                    $q->where('status', 'published');
+                })
+                ->whereHas('room', function($q) {
+                    $q->where('room_type', 'LIKE', '%lab%')
+                      ->orWhere('room_type', 'LIKE', '%Laboratory%')
+                      ->orWhere('room_type', 'LIKE', '%LAB%');
+                })
+                ->distinct('unit_id')
+                ->count('unit_id');
+        } catch (\Exception $e) {
+            $labCount = 0;
+        }
+
+        // Add year of study to each entry
+        $entriesWithYear = $entries->map(function($entry) {
+            $yearOfStudy = null;
+            if ($entry->unit_id && $entry->course_id) {
+                $courseUnitYear = DB::table('course_unit_year')
+                    ->where('course_id', $entry->course_id)
+                    ->where('unit_id', $entry->unit_id)
+                    ->first();
+                $yearOfStudy = $courseUnitYear ? $courseUnitYear->academic_year : null;
+            }
+            $entry->year_of_study = $yearOfStudy;
+            return $entry;
+        });
+
+        // Regroup entries with year data
+        $entriesByDay = $entriesWithYear->groupBy('day_of_week')->map(function($col) {
             return $col->sortBy('slot')->values();
         });
 
-        return view('lecturer.timetable', compact('entries', 'entriesByDay', 'availability', 'user'));
+        return view('lecturer.timetable', [
+            'entries' => $entriesWithYear,
+            'entriesByDay' => $entriesByDay,
+            'availability' => $availability,
+            'labCount' => $labCount,
+            'user' => $user
+        ]);
     }
 
     public function toggleAvailability(Request $request)
@@ -103,38 +151,78 @@ class SelfServiceController extends Controller
 
     public function rooms(Request $request)
     {
-        $user = $request->user();
-        // Very simple real-time availability: show rooms not used in the current slot
-        $now = now();
-        $day = max(1, min(5, (int)$now->dayOfWeekIso));
-        $slot = $this->timeToSlot($now->format('H:i'));
+        try {
+            $user = $request->user();
+            
+            // Very simple real-time availability: show rooms not used in the current slot
+            $now = now();
+            $dayOfWeek = (int)$now->dayOfWeekIso; // 1=Monday, 7=Sunday
+            
+            // Only check timetable entries on weekdays (Monday-Friday)
+            $busyRoomIds = collect();
+            if ($dayOfWeek >= 1 && $dayOfWeek <= 5) { // Weekdays only
+                $day = $dayOfWeek;
+                
+                // Simple time to slot calculation
+                $h = (int)$now->format('H');
+                $slot = $h < 10 ? 1 : ($h < 13 ? 2 : ($h < 16 ? 3 : 4));
 
-        $busyRoomIds = TimetableEntry::where('day_of_week', $day)
-            ->where('slot', $slot)
-            ->whereHas('timetable', function($q) {
-                $q->whereIn('status', ['approved', 'published']);
-            })
-            ->pluck('room_id');
+                $busyRoomIds = TimetableEntry::where('day_of_week', $day)
+                    ->where('slot', $slot)
+                    ->whereHas('timetable', function($q) {
+                        $q->whereIn('status', ['approved', 'published']);
+                    })
+                    ->pluck('room_id');
+            }
 
-        // Also check room bookings
-        $bookingBusyRoomIds = \App\Models\RoomBooking::where('institution_id', $user->institution_id)
-            ->where('status', 'active')
-            ->where('booking_date', now()->toDateString())
-            ->where(function($q) {
-                $now = now();
-                $q->where('start_time', '<=', $now->format('H:i:s'))
-                  ->where('end_time', '>=', $now->format('H:i:s'));
-            })
-            ->pluck('room_id');
+            // Also check room bookings with precise current timestamp - only currently active bookings
+            $currentDateTime = now();
+            $currentTime = $currentDateTime->format('H:i:s');
+            $currentDate = $currentDateTime->toDateString();
+            
+            $bookingBusyRoomIds = \App\Models\RoomBooking::where('institution_id', $user->institution_id)
+                ->where('status', 'active')
+                ->where('booking_date', $currentDate)
+                ->where('start_time', '<=', $currentTime)
+                ->where('end_time', '>', $currentTime) // Only currently active bookings
+                ->pluck('room_id');
 
-        $allBusyRoomIds = $busyRoomIds->merge($bookingBusyRoomIds)->unique();
+            $allBusyRoomIds = $busyRoomIds->merge($bookingBusyRoomIds)->unique();
 
-        $availableRooms = \App\Models\Room::where('institution_id', $user->institution_id)
-            ->whereNotIn('id', $allBusyRoomIds)
-            ->orderBy('name')
-            ->get();
+            $availableRooms = \App\Models\Room::where('institution_id', $user->institution_id)
+                ->whereNotIn('id', $allBusyRoomIds)
+                ->orderBy('name')
+                ->get();
 
-        return view('lecturer.rooms', compact('availableRooms', 'day', 'slot'));
+            // Get all rooms for the complete list
+            $allRooms = \App\Models\Room::where('institution_id', $user->institution_id)
+                ->orderBy('name')
+                ->get();
+            
+            // Get user's bookings
+            $myBookings = \App\Models\RoomBooking::where('lecturer_id', $user->id)
+                ->where('status', 'active')
+                ->where('booking_date', '>=', now()->toDateString())
+                ->with('room')
+                ->orderBy('booking_date')
+                ->orderBy('start_time')
+                ->get();
+
+            return view('lecturer.rooms-simple', compact('availableRooms', 'allRooms', 'myBookings'));
+            
+        } catch (\Exception $e) {
+            // Fallback: show all rooms if there's an error
+            $user = $request->user();
+            $allRooms = \App\Models\Room::where('institution_id', $user->institution_id)
+                ->orderBy('name')
+                ->get();
+            
+            return view('lecturer.rooms-simple', [
+                'availableRooms' => $allRooms,
+                'allRooms' => $allRooms,
+                'myBookings' => collect([])
+            ]);
+        }
     }
 
     public function requestChange(Request $request)
@@ -159,53 +247,19 @@ class SelfServiceController extends Controller
     public function chatbot(Request $request)
     {
         $user = $request->user();
-        $q = strtolower((string)$request->input('q'));
+        $question = $request->input('q', '');
 
-        if (str_contains($q, 'next class')) {
-            $now = now();
-            $day = max(1, min(5, (int)$now->dayOfWeekIso));
-            $entry = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
-                ->where('lecturer_id', $user->lecturer_id)
-                ->whereHas('timetable', function($q) {
-                    $q->whereIn('status', ['approved', 'published']);
-                })
-                ->where(function($qq) use ($day) {
-                    $qq->where('day_of_week', '>=', $day);
-                })
-                ->orderBy('day_of_week')->orderBy('slot')
-                ->first();
-            if ($entry) {
-                return response()->json(['answer' => sprintf('Your next class is %s (%s) in %s on day %d slot %d.', $entry->unit->code, $entry->course->name ?? '—', $entry->room->name ?? 'TBA', $entry->day_of_week, $entry->slot)]);
-            }
-            return response()->json(['answer' => 'No upcoming classes found.']);
+        if (empty($question)) {
+            return response()->json(['answer' => 'Please ask me something about your schedule.']);
         }
 
-        if (preg_match('/which\s+students\s+attend\s+(\w+)/i', $q, $m)) {
-            $unitCode = $m[1] ?? null;
-            // Placeholder: depends on student enrollment data
-            return response()->json(['answer' => "Student roster for $unitCode is not connected yet."]);
-        }
+        $aiService = new AIChatbotService();
+        $response = $aiService->generateResponse($question, $user);
 
-        if (str_contains($q, 'where am i teaching today')) {
-            $today = max(1, min(5, (int)now()->dayOfWeekIso));
-            $entries = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
-                ->where('lecturer_id', $user->lecturer_id)
-                ->whereHas('timetable', function($q) {
-                    $q->whereIn('status', ['approved', 'published']);
-                })
-                ->where('day_of_week', $today)
-                ->orderBy('slot')->get();
-            if ($entries->isEmpty()) {
-                return response()->json(['answer' => 'You have no classes today.']);
-            }
-            $answer = $entries->map(fn($e) => sprintf('%s %s in %s (slot %d)', $e->unit->code, $e->course->name ?? '—', $e->room->name ?? 'TBA', $e->slot))->implode('; ');
-            return response()->json(['answer' => $answer]);
-        }
-
-        return response()->json(['answer' => 'Sorry, I did not understand. Try: "When is my next class?"']);
+        return response()->json(['answer' => $response]);
     }
 
-    private function timeToSlot(string $time): int
+    public function timeToSlot(string $time): int
     {
         $t = strtotime($time);
         $h = (int)date('H', $t);
@@ -213,6 +267,113 @@ class SelfServiceController extends Controller
         if ($h < 13) return 2;
         if ($h < 16) return 3;
         return 4;
+    }
+
+    public function getYearOfStudy($entry): ?string
+    {
+        if (!$entry->unit_id || !$entry->course_id) {
+            return null;
+        }
+
+        $courseUnitYear = DB::table('course_unit_year')
+            ->where('course_id', $entry->course_id)
+            ->where('unit_id', $entry->unit_id)
+            ->first();
+
+        return $courseUnitYear ? $courseUnitYear->academic_year : null;
+    }
+
+    public function exportCSV(Request $request)
+    {
+        $user = $request->user();
+        
+        $entries = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
+            ->where('lecturer_id', $user->lecturer_id)
+            ->whereHas('timetable', function($q) {
+                $q->where('status', 'published');
+            })
+            ->orderBy('day_of_week')
+            ->orderBy('slot')
+            ->get();
+
+        $csvData = [];
+        $csvData[] = ['Day', 'Slot', 'Time', 'Unit Code', 'Unit Name', 'Course', 'Year', 'Room'];
+
+        foreach ($entries as $entry) {
+            $timeSlots = [1=>'7:00-10:00',2=>'10:00-13:00',3=>'13:00-16:00',4=>'16:00-19:00'];
+            $dayNames = [1=>'Monday',2=>'Tuesday',3=>'Wednesday',4=>'Thursday',5=>'Friday'];
+            
+            $csvData[] = [
+                $dayNames[$entry->day_of_week] ?? 'Day ' . $entry->day_of_week,
+                $entry->slot,
+                $timeSlots[$entry->slot] ?? 'Unknown',
+                $entry->unit->code ?? '—',
+                $entry->unit->name ?? '—',
+                $entry->course->name ?? '—',
+                $this->getYearOfStudy($entry) ?? '—',
+                $entry->room->name ?? 'TBA'
+            ];
+        }
+
+        $filename = 'timetable_' . $user->name . '_' . now()->format('Y-m-d') . '.csv';
+        
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+
+        $callback = function() use ($csvData) {
+            $file = fopen('php://output', 'w');
+            foreach ($csvData as $row) {
+                fputcsv($file, $row);
+            }
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    public function exportPDF(Request $request)
+    {
+        $user = $request->user();
+        
+        $entries = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])
+            ->where('lecturer_id', $user->lecturer_id)
+            ->whereHas('timetable', function($q) {
+                $q->where('status', 'published');
+            })
+            ->orderBy('day_of_week')
+            ->orderBy('slot')
+            ->get();
+
+        // Group by day for better organization
+        $entriesByDay = $entries->groupBy('day_of_week')->map(function($col) {
+            return $col->sortBy('slot')->values();
+        });
+
+        $filename = 'timetable_' . $user->name . '_' . now()->format('Y-m-d') . '.pdf';
+        
+        // Generate simple HTML for PDF conversion
+        $html = view('lecturer.timetable-pdf', compact('entries', 'entriesByDay', 'user'))->render();
+
+        // Use DomPDF if available, otherwise fallback to simple download
+        if (class_exists('Dompdf\Dompdf')) {
+            $dompdf = new \Dompdf\Dompdf();
+            $dompdf->loadHtml($html);
+            $dompdf->setPaper('A4', 'portrait');
+            $dompdf->render();
+
+            return response($dompdf->output(), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            ]);
+        } else {
+            // Fallback: return HTML as downloadable file
+            return response($html, 200, [
+                'Content-Type' => 'text/html',
+                'Content-Disposition' => 'attachment; filename="' . str_replace('.pdf', '.html', $filename) . '"',
+            ]);
+        }
     }
 }
 

@@ -32,6 +32,7 @@ class User extends Authenticatable
         'phone',
         'is_approved',
         'school_id_path',
+        'year_of_study',
     ];
 
     /**

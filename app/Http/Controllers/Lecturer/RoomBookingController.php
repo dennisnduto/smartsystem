@@ -19,7 +19,23 @@ class RoomBookingController extends Controller
             ->with(['room', 'course', 'unit'])
             ->orderBy('booking_date')
             ->orderBy('start_time')
-            ->paginate(15);
+            ->get();
+
+        if ($request->expectsJson()) {
+            return response()->json($bookings->map(function($booking) {
+                return [
+                    'id' => $booking->id,
+                    'room' => $booking->room,
+                    'purpose' => $booking->purpose,
+                    'start_time' => $booking->start_time,
+                    'end_time' => $booking->end_time,
+                    'booking_date' => $booking->booking_date->format('Y-m-d'),
+                    'status' => $booking->status,
+                    'can_cancel' => $booking->status === 'active' && $booking->booking_date->isFuture() || 
+                                   ($booking->booking_date->isToday() && now()->format('H:i:s') < $booking->end_time->format('H:i:s')),
+                ];
+            }));
+        }
 
         return view('lecturer.room-bookings.index', compact('bookings'));
     }
@@ -48,38 +64,72 @@ class RoomBookingController extends Controller
     {
         $user = $request->user();
 
-        $validated = $request->validate([
-            'room_id' => 'required|exists:rooms,id',
-            'course_id' => 'nullable|exists:courses,id',
-            'unit_id' => 'nullable|exists:units,id',
-            'booking_date' => 'required|date|after_or_equal:today',
-            'start_time' => 'required|date_format:H:i',
-            'end_time' => 'required|date_format:H:i|after:start_time',
-            'purpose' => 'nullable|string|max:255',
-            'notes' => 'nullable|string|max:1000',
-        ]);
+        // Handle quick booking with duration
+        if ($request->has('duration')) {
+            $validated = $request->validate([
+                'room_id' => 'required|exists:rooms,id',
+                'duration' => 'required|integer|min:1|max:3',
+                'purpose' => 'required|string|max:255',
+            ]);
+
+            $now = now();
+            $startTime = $now->format('H:i');
+            $endTime = $now->copy()->addHours((int)$validated['duration'])->format('H:i');
+            $bookingDate = $now->toDateString();
+
+            // Check if end time goes beyond 19:00 (end of day)
+            if (strtotime($endTime) > strtotime('19:00')) {
+                if ($request->expectsJson()) {
+                    return response()->json(['message' => 'Booking would extend beyond 19:00. Please choose a shorter duration.'], 422);
+                }
+                return back()->withErrors(['duration' => 'Booking would extend beyond 19:00. Please choose a shorter duration.'])->withInput();
+            }
+        } else {
+            $validated = $request->validate([
+                'room_id' => 'required|exists:rooms,id',
+                'course_id' => 'nullable|exists:courses,id',
+                'unit_id' => 'nullable|exists:units,id',
+                'booking_date' => 'required|date|after_or_equal:today',
+                'start_time' => 'required|date_format:H:i',
+                'end_time' => 'required|date_format:H:i|after:start_time',
+                'purpose' => 'nullable|string|max:255',
+                'notes' => 'nullable|string|max:1000',
+            ]);
+
+            $startTime = $validated['start_time'];
+            $endTime = $validated['end_time'];
+            $bookingDate = $validated['booking_date'];
+        }
 
         // Verify room belongs to lecturer's institution
         $room = Room::findOrFail($validated['room_id']);
         if ($room->institution_id !== $user->institution_id) {
-            return back()->withErrors(['room_id' => 'Room does not belong to your institution.'])->withInput();
+            $message = 'Room does not belong to your institution.';
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422);
+            }
+            return back()->withErrors(['room_id' => $message])->withInput();
         }
 
         // Check for double-booking
         $overlapping = RoomBooking::where('room_id', $validated['room_id'])
             ->where('status', 'active')
-            ->where('booking_date', $validated['booking_date'])
+            ->where('booking_date', $bookingDate)
             ->get()
-            ->filter(function($booking) use ($validated) {
+            ->filter(function($booking) use ($bookingDate, $startTime, $endTime) {
                 return $booking->isOverlapping(
-                    \Carbon\Carbon::parse($validated['booking_date']),
-                    $validated['start_time'],
-                    $validated['end_time']
+                    \Carbon\Carbon::parse($bookingDate),
+                    $startTime,
+                    $endTime
                 );
             });
 
         if ($overlapping->isNotEmpty()) {
-            return back()->withErrors(['start_time' => 'Room is already booked during this time.'])->withInput();
+            $message = 'Room is already booked during this time.';
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422);
+            }
+            return back()->withErrors(['start_time' => $message])->withInput();
         }
 
         // Check for timetable entry conflicts
@@ -88,15 +138,19 @@ class RoomBookingController extends Controller
             ->where('timetable_entries.room_id', $validated['room_id'])
             ->where('timetables.institution_id', $user->institution_id)
             ->whereIn('timetables.status', ['approved', 'published'])
-            ->where('timetable_entries.day_of_week', \Carbon\Carbon::parse($validated['booking_date'])->dayOfWeekIso)
-            ->where(function($q) use ($validated) {
-                $slot = $this->timeToSlot($validated['start_time']);
+            ->where('timetable_entries.day_of_week', \Carbon\Carbon::parse($bookingDate)->dayOfWeekIso)
+            ->where(function($q) use ($startTime) {
+                $slot = $this->timeToSlot($startTime);
                 $q->where('timetable_entries.slot', $slot);
             })
             ->exists();
 
         if ($conflict) {
-            return back()->withErrors(['start_time' => 'Room is scheduled in the timetable during this time.'])->withInput();
+            $message = 'Room is scheduled in the timetable during this time.';
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 422);
+            }
+            return back()->withErrors(['start_time' => $message])->withInput();
         }
 
         $booking = RoomBooking::create([
@@ -105,30 +159,80 @@ class RoomBookingController extends Controller
             'course_id' => $validated['course_id'] ?? null,
             'unit_id' => $validated['unit_id'] ?? null,
             'institution_id' => $user->institution_id,
-            'booking_date' => $validated['booking_date'],
-            'start_time' => $validated['start_time'],
-            'end_time' => $validated['end_time'],
+            'booking_date' => $bookingDate,
+            'start_time' => $startTime,
+            'end_time' => $endTime,
             'purpose' => $validated['purpose'] ?? 'Special Session',
             'notes' => $validated['notes'] ?? null,
             'status' => 'active',
         ]);
+
+        // Set auto-release time for quick bookings
+        if ($request->has('duration')) {
+            $booking->update([
+                'auto_released_at' => \Carbon\Carbon::parse($bookingDate . ' ' . $endTime)
+            ]);
+        }
 
         // Notify students if course/unit is specified
         if ($booking->course_id || $booking->unit_id) {
             $this->notifyStudents($booking);
         }
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Room booked successfully!',
+                'booking' => $booking->load('room')
+            ]);
+        }
+
         return redirect()->route('lecturer.room-bookings.index')
             ->with('success', 'Room booked successfully. Students have been notified.');
     }
 
-    public function destroy(RoomBooking $booking)
+    public function destroy(Request $request, $id)
     {
-        if ($booking->lecturer_id !== auth()->id()) {
-            abort(403);
+        $user = $request->user();
+        
+        // Find the booking manually to avoid route model binding issues
+        $booking = RoomBooking::find($id);
+        
+        if (!$booking) {
+            \Log::warning('Booking not found for cancellation', ['booking_id' => $id]);
+            
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Booking not found'], 404);
+            }
+            abort(404, 'Booking not found');
+        }
+        
+        // Debug: Log the IDs for troubleshooting
+        \Log::info('Booking cancellation attempt', [
+            'booking_id' => $booking->id,
+            'booking_lecturer_id' => $booking->lecturer_id,
+            'current_user_id' => $user->id,
+            'user_email' => $user->email
+        ]);
+        
+        if ($booking->lecturer_id !== $user->id) {
+            \Log::warning('Unauthorized booking cancellation attempt', [
+                'booking_id' => $booking->id,
+                'booking_lecturer_id' => $booking->lecturer_id,
+                'current_user_id' => $user->id
+            ]);
+            
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Unauthorized - You can only cancel your own bookings'], 403);
+            }
+            abort(403, 'You can only cancel your own bookings');
         }
 
         $booking->update(['status' => 'cancelled']);
+        
+        if ($request->expectsJson()) {
+            return response()->json(['success' => true, 'message' => 'Booking cancelled successfully.']);
+        }
         
         return redirect()->route('lecturer.room-bookings.index')
             ->with('success', 'Booking cancelled successfully.');

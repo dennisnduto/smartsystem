@@ -14,6 +14,8 @@ class DashboardController extends Controller
         \Log::info('Dashboard accessed by user with role: ' . $user->role);
         
         // Redirect based on user role
+        \Log::info('User role is: "' . $user->role . '"');
+        
         switch ($user->role) {
             case 'super_admin':
                 \Log::info('Redirecting to super admin dashboard');
@@ -31,12 +33,15 @@ class DashboardController extends Controller
                 return redirect()->route('institution-admin.dashboard');
                 
             case 'lecturer':
+                \Log::info('Redirecting to lecturer dashboard');
                 return redirect()->route('lecturer.dashboard');
                 
             case 'student':
+                \Log::info('Student role detected, redirecting to student.dashboard');
                 return redirect()->route('student.dashboard');
                 
             default:
+                \Log::info('No matching role, showing default dashboard');
                 // Default dashboard for others
                 return view('dashboard');
         }

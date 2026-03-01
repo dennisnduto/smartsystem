@@ -24,8 +24,8 @@ class DatabaseSeeder extends Seeder
 
         $groupA = TeachingGroup::create(['course_id' => $course->id, 'name' => 'Year1-A', 'size' => 40]);
 
-        $room1 = Room::create(['name' => 'R-101', 'capacity' => 60]);
-        $room2 = Room::create(['name' => 'R-102', 'capacity' => 40]);
+        $room1 = Room::create(['name' => 'R-101', 'capacity' => 60, 'institution_id' => $inst->id, 'department_id' => $dept->id]);
+        $room2 = Room::create(['name' => 'R-102', 'capacity' => 40, 'institution_id' => $inst->id, 'department_id' => $dept->id]);
 
         $lec = Lecturer::create(['name' => 'Dr. Ada Lovelace']);
 

@@ -12,11 +12,10 @@
 
                 <!-- Navigation Links -->
                 <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                    <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                        {{ __('Dashboard') }}
-                    </x-nav-link>
-                    
-                    @if(Auth::user()->isSuperAdmin())
+                    @if(Auth::check() && Auth::user()->isSuperAdmin())
+                        <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-nav-link>
                         <x-nav-link :href="route('super-admin.manage-admins')" :active="request()->routeIs('super-admin.manage-admins')">
                             {{ __('Manage Admins') }}
                         </x-nav-link>
@@ -26,7 +25,10 @@
                         <x-nav-link :href="route('super-admin.generate-report')" :active="request()->routeIs('super-admin.generate-report')">
                             {{ __('Reports') }}
                         </x-nav-link>
-                    @elseif(Auth::user()->isInstitutionAdmin())
+                    @elseif(Auth::check() && Auth::user()->isInstitutionAdmin())
+                        <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-nav-link>
                         <x-nav-link :href="route('institution-admin.departments.index')" :active="request()->routeIs('institution-admin.departments.*')">
                             {{ __('Departments') }}
                         </x-nav-link>
@@ -45,6 +47,16 @@
                         <x-nav-link :href="route('institution-admin.analytics')" :active="request()->routeIs('institution-admin.analytics')">
                             {{ __('Analytics') }}
                         </x-nav-link>
+                    @elseif(Auth::check() && Auth::user()->isStudent())
+                        <x-nav-link :href="route('student.dashboard')" :active="request()->routeIs('student.dashboard')">
+                            {{ __('Dashboard') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('student.timetable')" :active="request()->routeIs('student.timetable*')">
+                            {{ __('Timetable') }}
+                        </x-nav-link>
+                        <x-nav-link :href="route('student.rooms')" :active="request()->routeIs('student.rooms')">
+                            {{ __('Room Availability') }}
+                        </x-nav-link>
                     @endif
                 </div>
             </div>
@@ -55,14 +67,18 @@
                     <x-slot name="trigger">
                         <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 bg-white hover:text-gray-700 focus:outline-none transition ease-in-out duration-150">
                             <div>
-                                {{ Auth::user()->name }}
-                                @if(Auth::user()->isSuperAdmin())
+                                {{ Auth::check() ? Auth::user()->name : 'Guest' }}
+                                @if(Auth::check() && Auth::user()->isSuperAdmin())
                                     <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                                         Super Admin
                                     </span>
-                                @elseif(Auth::user()->isInstitutionAdmin())
+                                @elseif(Auth::check() && Auth::user()->isInstitutionAdmin())
                                     <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                                         {{ Auth::user()->institution ? Auth::user()->institution->name : 'Admin' }}
+                                    </span>
+                                @elseif(Auth::check() && Auth::user()->isStudent())
+                                    <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        Year {{ Auth::user()->year_of_study ? substr(Auth::user()->year_of_study, 1) : '?' }}
                                     </span>
                                 @endif
                             </div>
@@ -109,11 +125,10 @@
     <!-- Responsive Navigation Menu -->
     <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
         <div class="pt-2 pb-3 space-y-1">
-            <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
-                {{ __('Dashboard') }}
-            </x-responsive-nav-link>
-            
-            @if(Auth::user()->isSuperAdmin())
+            @if(Auth::check() && Auth::user()->isSuperAdmin())
+                <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                    {{ __('Dashboard') }}
+                </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('super-admin.manage-admins')" :active="request()->routeIs('super-admin.manage-admins')">
                     {{ __('Manage Admins') }}
                 </x-responsive-nav-link>
@@ -123,7 +138,10 @@
                 <x-responsive-nav-link :href="route('super-admin.generate-report')" :active="request()->routeIs('super-admin.generate-report')">
                     {{ __('Reports') }}
                 </x-responsive-nav-link>
-            @elseif(Auth::user()->isInstitutionAdmin())
+            @elseif(Auth::check() && Auth::user()->isInstitutionAdmin())
+                <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
+                    {{ __('Dashboard') }}
+                </x-responsive-nav-link>
                 <x-responsive-nav-link :href="route('institution-admin.departments.index')" :active="request()->routeIs('institution-admin.departments.*')">
                     {{ __('Departments') }}
                 </x-responsive-nav-link>
@@ -142,6 +160,16 @@
                 <x-responsive-nav-link :href="route('institution-admin.analytics')" :active="request()->routeIs('institution-admin.analytics')">
                     {{ __('Analytics') }}
                 </x-responsive-nav-link>
+            @elseif(Auth::check() && Auth::user()->isStudent())
+                <x-responsive-nav-link :href="route('student.dashboard')" :active="request()->routeIs('student.dashboard')">
+                    {{ __('Dashboard') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('student.timetable')" :active="request()->routeIs('student.timetable*')">
+                    {{ __('Timetable') }}
+                </x-responsive-nav-link>
+                <x-responsive-nav-link :href="route('student.rooms')" :active="request()->routeIs('student.rooms')">
+                    {{ __('Room Availability') }}
+                </x-responsive-nav-link>
             @endif
         </div>
 
@@ -149,18 +177,22 @@
         <div class="pt-4 pb-1 border-t border-gray-200">
             <div class="px-4">
                 <div class="font-medium text-base text-gray-800">
-                    {{ Auth::user()->name }}
-                    @if(Auth::user()->isSuperAdmin())
+                    {{ Auth::check() ? Auth::user()->name : 'Guest' }}
+                    @if(Auth::check() && Auth::user()->isSuperAdmin())
                         <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                             Super Admin
                         </span>
-                    @elseif(Auth::user()->isInstitutionAdmin())
+                    @elseif(Auth::check() && Auth::user()->isInstitutionAdmin())
                         <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                             {{ Auth::user()->institution ? Auth::user()->institution->name : 'Admin' }}
                         </span>
+                    @elseif(Auth::check() && Auth::user()->isStudent())
+                        <span class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Year {{ Auth::user()->year_of_study ? substr(Auth::user()->year_of_study, 1) : '?' }}
+                        </span>
                     @endif
                 </div>
-                <div class="font-medium text-sm text-gray-500">{{ Auth::user()->email }}</div>
+                <div class="font-medium text-sm text-gray-500">{{ Auth::check() ? Auth::user()->email : 'guest@example.com' }}</div>
             </div>
 
             <div class="mt-3 space-y-1">

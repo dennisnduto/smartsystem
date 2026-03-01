@@ -36,6 +36,7 @@ class RegisteredUserController extends Controller
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'institution_id' => ['required', 'exists:institutions,id'],
             'course_id' => ['required', 'exists:courses,id'],
+            'year_of_study' => ['required', 'string', 'in:Y1,Y2,Y3,Y4,Y5'],
             'school_id' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'], // 5MB max
         ]);
 
@@ -59,6 +60,7 @@ class RegisteredUserController extends Controller
             'institution_id' => $request->institution_id,
             'is_approved' => false, // Students require approval
             'school_id_path' => $schoolIdPath,
+            'year_of_study' => $request->year_of_study,
         ]);
 
         // Assign course to student

@@ -37,16 +37,22 @@ class StudentController extends Controller
         }
 
         // Get student's courses
-        $courses = $user->courses()->with('department')->get();
+        $courses = $user->courses()->with('department')->get() ?? collect([]);
         
         // Get today's classes
         $today = max(1, min(5, (int)now()->dayOfWeekIso));
-        $todayEntries = $this->getStudentTimetableEntries($user, $today);
+        $todayEntries = $this->getStudentTimetableEntries($user, $today) ?? collect([]);
+        
+        // Get all timetable entries for the week
+        $allEntries = $this->getStudentTimetableEntries($user) ?? collect([]);
+        $entriesByDay = $allEntries->groupBy('day_of_week')->map(function($col) {
+            return $col->sortBy('slot')->values();
+        }) ?? collect([]);
         
         // Get next lecture
         $nextLecture = $this->getNextLecture($user);
 
-        return view('student.dashboard', compact('user', 'courses', 'todayEntries', 'nextLecture', 'today'));
+        return view('student.dashboard', compact('user', 'courses', 'todayEntries', 'allEntries', 'entriesByDay', 'nextLecture', 'today'));
     }
 
     /**
@@ -115,44 +121,119 @@ class StudentController extends Controller
      */
     public function rooms(Request $request)
     {
-        $user = $request->user();
-        
-        if (!$user->is_approved) {
-            return redirect()->route('student.dashboard')->with('error', 'Your account is pending approval.');
+        try {
+            $user = $request->user();
+            
+            if (!$user->is_approved) {
+                return redirect()->route('student.dashboard')->with('error', 'Your account is pending approval.');
+            }
+
+            // Very simple real-time availability: show rooms not used in the current slot
+            $now = now()->setTimezone('Africa/Nairobi'); // Set to East Africa Time (UTC+3)
+            $dayOfWeek = (int)$now->format('w'); // 0=Sunday, 1=Monday, ..., 6=Saturday
+            $hour = (int)$now->format('H');
+            
+            // Logical time slot calculation
+            $day = $dayOfWeek;
+            $slot = 1; // Default
+            
+            if ($dayOfWeek >= 1 && $dayOfWeek <= 5) { // Weekdays only (1=Monday to 5=Friday)
+                if ($hour >= 7 && $hour < 10) {
+                    $slot = 1; // 7:00am-10:00am
+                } elseif ($hour >= 10 && $hour < 13) {
+                    $slot = 2; // 10:00am-1:00pm
+                } elseif ($hour >= 13 && $hour < 16) {
+                    $slot = 3; // 1:00pm-4:00pm
+                } elseif ($hour >= 16 && $hour < 19) {
+                    $slot = 4; // 4:00pm-7:00pm
+                } else {
+                    // Outside class hours (before 7am or after 7pm)
+                    $slot = 0; // No active slot
+                }
+            } else {
+                // Weekend - no scheduled classes
+                $slot = 0; // No active slot
+            }
+            
+            // Only check timetable entries if we're in an active time slot on weekdays
+            $busyRoomIds = collect();
+            if ($dayOfWeek >= 1 && $dayOfWeek <= 5 && $slot > 0) {
+                $busyRoomIds = TimetableEntry::where('day_of_week', $day)
+                    ->where('slot', $slot)
+                    ->whereHas('timetable', function($q) use ($user) {
+                        $q->where('institution_id', $user->institution_id)
+                          ->whereIn('status', ['approved', 'published']);
+                    })
+                    ->pluck('room_id');
+            }
+
+            // Also check room bookings with precise current timestamp - only currently active bookings
+            $currentDateTime = now();
+            $currentTime = $currentDateTime->format('H:i:s');
+            $currentDate = $currentDateTime->toDateString();
+            
+            $bookingBusyRoomIds = \App\Models\RoomBooking::where('institution_id', $user->institution_id)
+                ->where('status', 'active')
+                ->where('booking_date', $currentDate)
+                ->where('start_time', '<=', $currentTime)
+                ->where('end_time', '>', $currentTime) // Only currently active bookings
+                ->pluck('room_id');
+
+            $allBusyRoomIds = $busyRoomIds->merge($bookingBusyRoomIds)->unique();
+
+            $availableRooms = \App\Models\Room::where('institution_id', $user->institution_id)
+                ->whereNotIn('id', $allBusyRoomIds)
+                ->orderBy('name')
+                ->get();
+
+            // Get all rooms for the complete list
+            $allRooms = \App\Models\Room::where('institution_id', $user->institution_id)
+                ->orderBy('name')
+                ->get();
+
+            // Handle AJAX requests for real-time updates
+            if ($request->ajax() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'available_rooms' => $availableRooms,
+                    'total_rooms' => $allRooms->count(),
+                    'available_count' => $availableRooms->count(),
+                    'timestamp' => $now->format('H:i:s'),
+                    'day' => $day,
+                    'slot' => $slot,
+                    'is_active_slot' => $slot > 0
+                ]);
+            }
+
+            return view('student.rooms', compact('user', 'availableRooms', 'allRooms', 'day', 'slot', 'now'));
+            
+        } catch (\Exception $e) {
+            // Fallback: show all rooms if there's an error
+            $user = $request->user();
+            $allRooms = \App\Models\Room::where('institution_id', $user->institution_id)
+                ->orderBy('name')
+                ->get();
+            
+            if ($request->ajax() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
+                return response()->json([
+                    'error' => 'Error loading room data',
+                    'available_rooms' => $allRooms,
+                    'total_rooms' => $allRooms->count(),
+                    'available_count' => $allRooms->count(),
+                    'timestamp' => now()->format('H:i:s'),
+                    'slot' => 0,
+                    'is_active_slot' => false
+                ], 500);
+            }
+            
+            return view('student.rooms', [
+                'user' => $user,
+                'availableRooms' => $allRooms,
+                'allRooms' => $allRooms,
+                'day' => now()->dayOfWeekIso,
+                'slot' => 0,
+                'now' => now()
+            ]);
         }
-
-        $now = now();
-        $day = max(1, min(5, (int)$now->dayOfWeekIso));
-        $slot = $this->timeToSlot($now->format('H:i'));
-
-        // Get rooms in use at current time
-        $busyRoomIds = TimetableEntry::where('day_of_week', $day)
-            ->where('slot', $slot)
-            ->whereHas('timetable', function($q) use ($user) {
-                $q->where('institution_id', $user->institution_id)
-                  ->where('status', 'published');
-            })
-            ->pluck('room_id');
-
-        // Also check room bookings
-        $bookingBusyRoomIds = \App\Models\RoomBooking::where('institution_id', $user->institution_id)
-            ->where('status', 'active')
-            ->where('booking_date', $now->toDateString())
-            ->where(function($q) use ($now) {
-                $q->where('start_time', '<=', $now->format('H:i:s'))
-                  ->where('end_time', '>=', $now->format('H:i:s'));
-            })
-            ->pluck('room_id');
-
-        $allBusyRoomIds = $busyRoomIds->merge($bookingBusyRoomIds)->unique();
-
-        // Get available rooms in student's institution
-        $availableRooms = Room::where('institution_id', $user->institution_id)
-            ->whereNotIn('id', $allBusyRoomIds)
-            ->orderBy('name')
-            ->get();
-
-        return view('student.rooms', compact('availableRooms', 'day', 'slot', 'now'));
     }
 
     /**
@@ -317,31 +398,67 @@ class StudentController extends Controller
     }
 
     /**
+     * Update student profile
+     */
+    public function updateProfile(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user->is_approved) {
+            return redirect()->route('student.dashboard')->with('error', 'Your account is pending approval.');
+        }
+
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:users,email,'.$user->id],
+            'year_of_study' => ['required', 'string', 'in:Y1,Y2,Y3,Y4,Y5'],
+        ]);
+
+        $user->update([
+            'name' => $request->name,
+            'email' => $request->email,
+            'year_of_study' => $request->year_of_study,
+        ]);
+
+        return redirect()->route('student.dashboard')
+            ->with('success', 'Profile updated successfully! Your timetable has been refreshed for your new year of study.');
+    }
+
+    /**
      * Get student's timetable entries (with shared unit sessions, no duplication)
      */
     private function getStudentTimetableEntries($user, $day = null)
     {
-        // Get student's course_unit_year IDs
-        $courseUnitYearIds = $user->courseUnitYears()->pluck('course_unit_year.id');
+        // Get student's year of study
+        $studentYear = $user->year_of_study;
         
         // Get courses the student is enrolled in
         $courseIds = $user->courses()->pluck('courses.id');
+        
+        // Return empty collection if no courses or no institution
+        if ($courseIds->isEmpty() || !$user->institution_id) {
+            return collect([]);
+        }
 
         // Get timetable entries for student's courses/units
-        // Filter by published timetables only
+        // Filter by published timetables only and student's year of study
         $query = TimetableEntry::with(['unit', 'course', 'room', 'lecturer', 'timetable'])
             ->whereHas('timetable', function($q) use ($user) {
                 $q->where('institution_id', $user->institution_id)
                   ->where('status', 'published');
             })
-            ->where(function($q) use ($courseUnitYearIds, $courseIds) {
-                // Match by course_unit_year (through teaching groups or direct course/unit match)
-                $q->whereIn('course_id', $courseIds)
-                  ->orWhereIn('unit_id', function($subQuery) use ($courseUnitYearIds) {
-                      $subQuery->select('unit_id')
-                          ->from('course_unit_year')
-                          ->whereIn('id', $courseUnitYearIds);
-                  });
+            ->where(function($q) use ($courseIds, $studentYear) {
+                // Match by course_id first (simplified for debugging)
+                $q->whereIn('course_id', $courseIds);
+                
+                // Only add year filtering if student has a year set
+                if ($studentYear) {
+                    $q->whereHas('unit', function($unitQuery) use ($studentYear) {
+                        $unitQuery->whereHas('courseUnitYears', function($cuyQuery) use ($studentYear) {
+                            $cuyQuery->where('academic_year', $studentYear);
+                        });
+                    });
+                }
             });
 
         if ($day) {

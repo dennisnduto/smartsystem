@@ -25,4 +25,9 @@ class Unit extends Model
     {
         return $this->hasMany(TimetableEntry::class);
     }
+
+    public function courseUnitYears(): HasMany
+    {
+        return $this->hasMany(CourseUnitYear::class);
+    }
 }
