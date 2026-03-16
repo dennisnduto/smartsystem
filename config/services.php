@@ -18,9 +18,18 @@ return [
         'token' => env('POSTMARK_TOKEN'),
     ],
 
+    'ai_provider' => env('AI_PROVIDER', 'openai'),
+
     'openai' => [
         'key' => env('OPENAI_API_KEY'),
         'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+        'url' => env('OPENAI_API_URL', 'https://api.openai.com/v1/chat/completions'),
+    ],
+
+    'gemini' => [
+        'key' => env('AI_API_KEY'),
+        'model' => env('GEMINI_MODEL', 'gemini-1.5-flash'),
+        'url' => 'https://generativelanguage.googleapis.com/v1beta/models/',
     ],
 
     'ses' => [
@@ -34,11 +43,6 @@ return [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
-    ],
-
-    'openai' => [
-        'api_key' => env('OPENAI_API_KEY'),
-        'api_url' => env('OPENAI_API_URL', 'https://api.openai.com/v1/chat/completions'),
     ],
 
 ];

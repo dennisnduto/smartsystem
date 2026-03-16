@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\InstitutionAdmin;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Timetable, Department, Course, Room, User};
-use App\Services\{TimetableGenerator, AITimetableGenerator};
+use App\Models\{Timetable, TimetableEntry, Department, Course, Room, User};
+use App\Services\{TimetableGenerator, AITimetableGenerator, ConflictDetector};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
@@ -87,10 +87,68 @@ class TimetableController extends Controller
         
         $timetable->load(['department', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer', 'entries.teachingGroup']);
         
-        // Generate timetable grid
-        $timetableGrid = $this->generateTimetableGrid($timetable);
+        // Pivot into Matrix for premium side-by-side view (matches lecturer/student views)
+        $matrix = [];
+        $programs = [];
+        $entries = $timetable->entries;
+
+        // Ensure academic year retrieval with fallback
+        $entries = $entries->map(function($entry) {
+            $cuy = \Illuminate\Support\Facades\DB::table('course_unit_year')
+                ->where('course_id', $entry->course_id)
+                ->where('unit_id', $entry->unit_id)
+                ->first();
+            
+            $entry->academic_year_val = $cuy->academic_year ?? $entry->timetable->academic_year ?? 'N/A';
+            return $entry;
+        });
+
+        foreach ($entries as $entry) {
+            $courseCode = !empty($entry->course->code) 
+                ? strtoupper($entry->course->code) 
+                : $this->abbreviateCourseName($entry->course->name ?? 'Unknown Course');
+                
+            $academicYear = $entry->academic_year_val;
+            $key = $courseCode . ' | ' . $academicYear;
+            
+            if (!isset($programs[$key])) {
+                $programs[$key] = [
+                    'course' => $courseCode,
+                    'year' => $academicYear,
+                ];
+            }
+            $matrix[$entry->day_of_week][$entry->slot][$key] = $entry;
+        }
+
+        // Sort programs naturally
+        uksort($programs, function($a, $b) {
+            return strnatcmp($a, $b);
+        });
+
+        // Group and chunk
+        $programsByCourse = [];
+        foreach ($programs as $key => $details) {
+            $course = $details['course'];
+            $programsByCourse[$course][$key] = $details;
+        }
+
+        $programChunks = [];
+        foreach ($programsByCourse as $course => $coursePrograms) {
+            $chunks = array_chunk($coursePrograms, 7, true);
+            foreach ($chunks as $chunk) {
+                $programChunks[] = [
+                    'course' => $course,
+                    'programs' => $chunk
+                ];
+            }
+        }
+
+        $days = $this->days;
+        $slots = [1 => '7:00-10:00', 2 => '10:00-13:00', 3 => '13:00-16:00', 4 => '16:00-19:00'];
         
-        $courses = collect(); // optional legacy
+        // Keep legacy timetableGrid for the "Grouped View" toggle which still uses it
+        $timetableGrid = $this->generateTimetableGrid($timetable);
+        $courses = collect(); 
         $rooms = Room::whereHas('department', function($q) use ($timetable) {
             $q->where('institution_id', $timetable->institution_id);
         })->get();
@@ -98,9 +156,14 @@ class TimetableController extends Controller
         $lecturers = User::where('role', 'lecturer')
             ->where('institution_id', $timetable->institution_id)
             ->get();
+
+        $conflictDetector = app(ConflictDetector::class);
+        $conflicts = $conflictDetector->detectConflicts($timetable);
+        $recommendations = $conflictDetector->getOptimizationRecommendations($timetable);
         
         return view('institution-admin.timetables.show', compact(
-            'timetable', 'timetableGrid', 'courses', 'rooms', 'lecturers'
+            'timetable', 'timetableGrid', 'courses', 'rooms', 'lecturers',
+            'matrix', 'programChunks', 'days', 'slots', 'conflicts', 'recommendations'
         ));
     }
 
@@ -141,11 +204,16 @@ class TimetableController extends Controller
             'total_assignments' => $totalAssignments
         ]);
 
-        // Ensure all lecturers for this institution have submitted availability
+        // Ensure all lecturers for this institution who HAVE assignments have submitted availability
         $lecturerIds = \Illuminate\Support\Facades\DB::table('users')
             ->where('institution_id', $institutionId)
             ->where('role', 'lecturer')
             ->whereNotNull('lecturer_id')
+            ->whereExists(function ($query) {
+                $query->select(\Illuminate\Support\Facades\DB::raw(1))
+                    ->from('course_unit_year_user')
+                    ->whereColumn('course_unit_year_user.user_id', 'users.id');
+            })
             ->pluck('lecturer_id')
             ->unique()
             ->values();
@@ -302,9 +370,9 @@ class TimetableController extends Controller
     {
         $this->authorize('view', $timetable);
         
-        $timetable->load(['institution', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer']);
+        $timetable->load(['institution', 'department', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer', 'entries.teachingGroup']);
         
-        // Check if this is a course-specific export
+        $user = auth()->user();
         $courseId = $request->get('course_id');
         $courseName = '';
         
@@ -312,25 +380,87 @@ class TimetableController extends Controller
             $course = $timetable->entries->where('course_id', $courseId)->first()?->course;
             if ($course) {
                 $courseName = $course->name;
-                // Filter entries to only include this course
                 $timetable->setRelation('entries', $timetable->entries->where('course_id', $courseId));
             }
         }
+
+        // Generate Matrix logic for PDF (matches show() and SelfServiceController)
+        $matrix = [];
+        $programs = [];
+        $entries = $timetable->entries;
+
+        $entries = $entries->map(function($entry) {
+            $cuy = \Illuminate\Support\Facades\DB::table('course_unit_year')
+                ->where('course_id', $entry->course_id)
+                ->where('unit_id', $entry->unit_id)
+                ->first();
+            
+            $entry->academic_year_val = $cuy->academic_year ?? $entry->timetable->academic_year ?? 'N/A';
+            return $entry;
+        });
+
+        foreach ($entries as $entry) {
+            $courseCode = !empty($entry->course->code) 
+                ? strtoupper($entry->course->code) 
+                : $this->abbreviateCourseName($entry->course->name ?? 'Unknown Course');
+                
+            $academicYear = $entry->academic_year_val;
+            $key = $courseCode . ' | ' . $academicYear;
+            
+            if (!isset($programs[$key])) {
+                $programs[$key] = [
+                    'course' => $courseCode,
+                    'year' => $academicYear,
+                ];
+            }
+            $matrix[$entry->day_of_week][$entry->slot][$key] = $entry;
+        }
+
+        uksort($programs, function($a, $b) {
+            return strnatcmp($a, $b);
+        });
+
+        $programsByCourse = [];
+        foreach ($programs as $key => $details) {
+            $course = $details['course'];
+            $programsByCourse[$course][$key] = $details;
+        }
+
+        $programChunks = [];
+        foreach ($programsByCourse as $course => $coursePrograms) {
+            $chunks = array_chunk($coursePrograms, 7, true);
+            foreach ($chunks as $chunk) {
+                $programChunks[] = [
+                    'course' => $course,
+                    'programs' => $chunk
+                ];
+            }
+        }
+
+        $days = $this->days;
+        $slots = [1 => '7:00-10:00', 2 => '10:00-13:00', 3 => '13:00-16:00', 4 => '16:00-19:00'];
+        $title = $courseId ? $courseName . ' Timetable' : 'Institution Wide Timetable';
+        $isInstitutional = true;
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('institution-admin.timetables.pdf', [
+            'timetable' => $timetable,
+            'courseName' => $courseName,
+            'matrix' => $matrix,
+            'programChunks' => $programChunks,
+            'days' => $days,
+            'slots' => $slots,
+            'user' => $user,
+            'title' => $title,
+            'isInstitutional' => $isInstitutional
+        ]);
         
-        // Generate PDF using DomPDF
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('institution-admin.timetables.pdf', compact('timetable', 'courseName'));
-        
-        // Set paper size and orientation
         $pdf->setPaper('A4', 'landscape');
-        
-        // Set options for better PDF generation
         $pdf->setOptions([
             'isHtml5ParserEnabled' => true,
             'isRemoteEnabled' => true,
             'defaultFont' => 'Arial'
         ]);
         
-        // Generate filename
         $baseFilename = 'Timetable_' . $timetable->name;
         if ($courseName) {
             $baseFilename .= '_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $courseName);
@@ -392,7 +522,7 @@ class TimetableController extends Controller
         $this->authorize('update', $timetable);
         
         if ($timetable->status === 'published') {
-            $timetable->update(['status' => 'approved']);
+            $timetable->unpublish();
             $message = 'Timetable unpublished but remains approved.';
         } else {
             $timetable->publish(auth()->user());
@@ -449,6 +579,49 @@ class TimetableController extends Controller
             }
         }
         
-        return $grid;
+    }
+
+    /**
+     * Abbreviate long course names to save space in dense views.
+     */
+    private function abbreviateCourseName($name)
+    {
+        $replacements = [
+            'Bachelor of Science in Software Engineering' => 'BSE',
+            'Bachelor of Science Software Engineering' => 'BSE',
+            'Software Engineering' => 'BSE',
+            
+            'Bachelor of Science in Computer Science' => 'BCS',
+            'Bachelor of Science Computer Science' => 'BCS',
+            'Computer Science' => 'BCS',
+            
+            'Bachelor of Science in Computer Technology' => 'BST',
+            'Bachelor of Science Computer Technology' => 'BST',
+            'Computer Technology' => 'BST',
+            
+            'Bachelor of Business Information Technology' => 'BBIT',
+            'Business Information Technology' => 'BBIT',
+            
+            'Bachelor of Science in Information Technology' => 'BIT',
+            'Bachelor of Science Information Technology' => 'BIT',
+            'Information Technology' => 'BIT',
+        ];
+
+        foreach ($replacements as $long => $short) {
+            if (stripos($name, $long) !== false) {
+                return $short;
+            }
+        }
+
+        // Generic abbreviation if no match
+        $words = explode(' ', str_replace(['(', ')', '-', '/'], ' ', $name));
+        $abbr = '';
+        foreach ($words as $word) {
+            if (strlen($word) > 2 && !in_array(strtolower($word), ['and', 'for', 'the', 'with'])) {
+                $abbr .= strtoupper($word[0]);
+            }
+        }
+        
+        return !empty($abbr) ? $abbr : strtoupper(substr($name, 0, 3));
     }
 }

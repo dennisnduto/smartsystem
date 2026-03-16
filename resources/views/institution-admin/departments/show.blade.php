@@ -104,8 +104,6 @@
                             <tr>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course Code</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Course Name</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Credits</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Year</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                             </tr>
                         </thead>
@@ -116,8 +114,6 @@
                                         {{ $course->code }}
                                     </td>
                                     <td class="px-6 py-4 text-sm text-gray-900">{{ $course->name }}</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $course->credits }}</td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ $course->year ?? 'N/A' }}</td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <a href="{{ route('institution-admin.courses.show', $course) }}" class="text-indigo-600 hover:text-indigo-900 mr-3">View</a>
                                         <a href="{{ route('institution-admin.courses.edit', $course) }}" class="text-blue-600 hover:text-blue-900">Edit</a>

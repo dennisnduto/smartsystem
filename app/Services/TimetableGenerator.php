@@ -48,7 +48,7 @@ class TimetableGenerator
                     'cuy.course_id',
                     'cuy.academic_year',
                     'cuy.semester',
-                    'u.lecturer_id',
+                    'u.id as lecturer_id',
                     'cuyu.is_lab_only'
                 )
                 ->get();
@@ -63,7 +63,7 @@ class TimetableGenerator
                     'cuy.course_id',
                     'cuy.academic_year',
                     'cuy.semester',
-                    'u.lecturer_id',
+                    'u.id as lecturer_id',
                     'cuyu.is_lab_only'
                 )
                 ->get();
@@ -158,17 +158,8 @@ class TimetableGenerator
             $availabilityMatrix[(int) $row->lecturer_id][(int) $row->day][(int) $row->slot] = $row->status;
         }
         
-        // If a lecturer has no availability records, assume they're available (default to 'available')
-        // This allows generation even if lecturers haven't set availability yet
-        foreach ($lecturerIds as $lecturerId) {
-            for ($day = 1; $day <= 5; $day++) {
-                for ($slot = 1; $slot <= 4; $slot++) {
-                    if (!isset($availabilityMatrix[$lecturerId][$day][$slot])) {
-                        $availabilityMatrix[$lecturerId][$day][$slot] = 'available'; // Default to available
-                    }
-                }
-            }
-        }
+        // Strictly Exclusive Availability: 
+        // We do NOT assume availability. If no record exists for a slot, it remains null/false.
         
         \Log::info('TimetableGenerator: Starting generation', [
             'assignments_count' => $assignments->count(),
@@ -176,11 +167,39 @@ class TimetableGenerator
             'lecturers_count' => $lecturerIds->count()
         ]);
 
-        // Don't group by unit - schedule each assignment individually
-        $scheduledEntries = [];
+        // Track the scheduling in-memory for this run
         $lecturerSchedule = []; // Track lecturer usage in this generation
         $roomSchedule = []; // Track room usage in this generation
+        $groupSchedule = []; // Track student group (Course + Year) usage in this generation
         $timeSlotUsage = []; // Track which time slots are used overall
+
+        // Preload external occupancy from other published/approved timetables across the institution
+        $externalEntries = TimetableEntry::whereHas('timetable', function($q) use ($institutionId, $timetable) {
+                $q->where('institution_id', $institutionId)
+                  ->whereIn('status', ['published', 'approved'])
+                  ->where('id', '!=', $timetable->id);
+            })
+            ->with('timetable')
+            ->get();
+
+        foreach ($externalEntries as $ee) {
+            $day = (int)$ee->day_of_week;
+            $slot = (int)$ee->slot;
+            
+            if ($ee->lecturer_id) {
+                $lecturerSchedule[$ee->lecturer_id][$day][$slot] = true;
+            }
+            if ($ee->room_id) {
+                $roomSchedule[$ee->room_id][$day][$slot] = true;
+            }
+            if ($ee->course_id && $ee->timetable) {
+                $extYear = $this->convertAcademicYear($ee->timetable->academic_year);
+                if ($extYear) {
+                    $groupSchedule[$ee->course_id][$extYear][$day][$slot] = true;
+                }
+            }
+            $timeSlotUsage[$day][$slot] = ($timeSlotUsage[$day][$slot] ?? 0) + 1;
+        }
 
         // Shuffle assignments to randomize scheduling order
         $assignmentsArray = $assignments->shuffle();
@@ -214,8 +233,9 @@ class TimetableGenerator
                     continue; // Skip if no suitable slot found
                 }
 
-                // Check lecturer availability
-                if ($this->isLecturerAvailable($assignment, $day, $slot, $lecturerSchedule, $availabilityMatrix)) {
+                // Check lecturer and group availability
+                if ($this->isLecturerAvailable($assignment, $day, $slot, $lecturerSchedule, $availabilityMatrix) &&
+                    $this->isGroupAvailable($assignment, $day, $slot, $groupSchedule)) {
                     // Find suitable room
                     $room = $this->findSuitableRoom($assignment, $rooms, $roomSchedule, $day, $slot);
                     
@@ -232,22 +252,10 @@ class TimetableGenerator
                                 'room_id' => $room->id,
                             ]);
 
-                        // Auto-lock lecturer slot after scheduling to keep availability in sync
-                        LecturerAvailability::updateOrCreate(
-                            [
-                                'lecturer_id' => $assignment->lecturer_id,
-                                'day' => $day,
-                                'slot' => $slot,
-                            ],
-                            ['status' => 'auto_busy']
-                        );
-
-                        // Also update in-memory availability matrix so subsequent checks see it as unavailable
-                        $availabilityMatrix[$assignment->lecturer_id][$day][$slot] = 'auto_busy';
-
-                        // Track the scheduling
+                        // Track the scheduling in-memory for this run
                         $lecturerSchedule[$assignment->lecturer_id][$day][$slot] = true;
                         $roomSchedule[$room->id][$day][$slot] = true;
+                        $groupSchedule[$assignment->course_id][$assignment->academic_year][$day][$slot] = true;
                         $timeSlotUsage[$day][$slot] = ($timeSlotUsage[$day][$slot] ?? 0) + 1;
                         $scheduledEntries[] = $entry;
                         $scheduled = true;
@@ -305,12 +313,12 @@ class TimetableGenerator
     {
         $lecturerId = $assignment->lecturer_id;
 
-        // Restrict to slots where lecturer is explicitly marked as available in lecturer_availability
+        // Restrict to slots where lecturer is available (Default is available unless explicitly busy/unavailable)
         $filteredSlots = [];
         foreach ($slots as $slot) {
-            $status = $availabilityMatrix[$lecturerId][$day][$slot] ?? null;
-            // IF no row -> unavailable; ONLY explicit 'available' is allowed
-            if ($status === 'available') {
+            $status = $availabilityMatrix[$lecturerId][$day][$slot] ?? 'available';
+            
+            if ($status === 'available' || $status === 'auto_busy') {
                 $filteredSlots[] = $slot;
             }
         }
@@ -344,19 +352,15 @@ class TimetableGenerator
     {
         $lecturerId = $assignment->lecturer_id;
         
-        // Check if lecturer is already scheduled at this time
+        // Check if lecturer is already scheduled at this time in current run
         if (isset($lecturerSchedule[$lecturerId][$day][$slot])) {
             return false;
         }
 
-        // Check availability constraints from lecturer_availability table
-        $status = $availabilityMatrix[$lecturerId][$day][$slot] ?? null;
-        // IF no row -> unavailable; IF status != available -> unavailable
-        if ($status !== 'available') {
-            return false;
-        }
+        // Check availability records - assume available if NO record, OR if status is 'available' or 'auto_busy'
+        $status = $availabilityMatrix[$lecturerId][$day][$slot] ?? 'available';
 
-        return true;
+        return $status === 'available' || $status === 'auto_busy';
     }
 
     /**
@@ -370,9 +374,12 @@ class TimetableGenerator
                 return false;
             }
 
-            // Check room type requirements
-            if ($assignment->is_lab_only && $room->room_type !== 'lab') {
-                return false;
+            // Check room type requirements (Strict Separation)
+            if ($assignment->is_lab_only) {
+                if ($room->room_type !== 'lab') return false;
+            } else {
+                // If not lab only, prefer non-lab rooms to preserve labs for actual lab units
+                if ($room->room_type === 'lab') return false;
             }
 
             return true;
@@ -425,6 +432,22 @@ class TimetableGenerator
         }
         
         return $availableSlots;
+    }
+
+    /**
+     * Check if the student group (Course + Year) is available at the given time
+     */
+    private function isGroupAvailable($assignment, $day, $slot, $groupSchedule)
+    {
+        $courseId = $assignment->course_id;
+        $academicYear = $assignment->academic_year;
+
+        // Check if this course group is already scheduled for another unit at this time
+        if (isset($groupSchedule[$courseId][$academicYear][$day][$slot])) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

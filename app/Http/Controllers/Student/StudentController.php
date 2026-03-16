@@ -39,9 +39,10 @@ class StudentController extends Controller
         // Get student's courses
         $courses = $user->courses()->with('department')->get() ?? collect([]);
         
-        // Get today's classes
-        $today = max(1, min(5, (int)now()->dayOfWeekIso));
-        $todayEntries = $this->getStudentTimetableEntries($user, $today) ?? collect([]);
+        // Get today's classes (Africa/Nairobi)
+        $now = now()->setTimezone('Africa/Nairobi');
+        $today = (int)$now->dayOfWeekIso;
+        $todayEntries = ($today >= 1 && $today <= 5) ? $this->getStudentTimetableEntries($user, $today) : collect([]);
         
         // Get all timetable entries for the week
         $allEntries = $this->getStudentTimetableEntries($user) ?? collect([]);
@@ -52,7 +53,99 @@ class StudentController extends Controller
         // Get next lecture
         $nextLecture = $this->getNextLecture($user);
 
-        return view('student.dashboard', compact('user', 'courses', 'todayEntries', 'allEntries', 'entriesByDay', 'nextLecture', 'today'));
+        // Get available rooms count for initial load
+        $availableRoomsCount = $this->getAvailableRoomsCount($user, $now);
+
+        return view('student.dashboard', compact('user', 'courses', 'todayEntries', 'allEntries', 'entriesByDay', 'nextLecture', 'today', 'availableRoomsCount'));
+    }
+
+    /**
+     * Get dashboard stats in JSON for real-time updates
+     */
+    public function dashboardStats(Request $request)
+    {
+        $user = $request->user();
+        
+        if (!$user->is_approved) {
+            return response()->json(['error' => 'Unapproved'], 403);
+        }
+
+        $now = now()->setTimezone('Africa/Nairobi');
+        $today = (int)$now->dayOfWeekIso;
+        $currentTime = $now->format('H:i');
+        $currentDate = $now->toDateString();
+        $currentSlot = $this->timeToSlot($currentTime);
+        
+        $todayEntries = $this->getStudentTimetableEntries($user, $today);
+        $nextLecture = $this->getNextLecture($user);
+        
+        $timeSlots = [1=>'7:00am-10:00am', 2=>'10:00am-1:00pm', 3=>'1:00pm-4:00pm', 4=>'4:00pm-7:00pm'];
+
+        $formattedToday = $todayEntries->map(function($entry) use ($currentSlot, $timeSlots) {
+            $status = 'UPCOMING';
+            if ($entry->slot == $currentSlot) $status = 'NOW';
+            elseif ($entry->slot < $currentSlot) $status = 'COMPLETED';
+            
+            return [
+                'unit_code' => $entry->unit->code ?? 'Unknown',
+                'unit_name' => $entry->unit->name ?? 'Unknown',
+                'time' => $timeSlots[$entry->slot] ?? 'Unknown',
+                'slot' => $entry->slot,
+                'room' => $entry->room->name ?? 'TBA',
+                'lecturer' => $entry->lecturer->name ?? null,
+                'status' => $status
+            ];
+        });
+
+        $availableRoomsCount = $this->getAvailableRoomsCount($user, $now);
+
+        return response()->json([
+            'live_time' => $now->format('H:i:s'),
+            'today_classes_count' => $todayEntries->count(),
+            'available_rooms_count' => $availableRoomsCount,
+            'next_lecture' => $nextLecture ? [
+                'unit_code' => $nextLecture->unit->code ?? 'Unknown',
+                'unit_name' => $nextLecture->unit->name ?? 'Unknown',
+                'lecturer' => $nextLecture->lecturer->name ?? 'TBA',
+                'day' => $this->days[$nextLecture->day_of_week] ?? 'Unknown',
+                'time' => $timeSlots[$nextLecture->slot] ?? 'Unknown',
+                'room' => $nextLecture->room->name ?? 'TBA'
+            ] : null,
+            'today_sessions' => $formattedToday,
+            'is_weekend' => $today >= 6
+        ]);
+    }
+
+    /**
+     * Get available rooms count based on currently occupied rooms (timetable + bookings)
+     */
+    private function getAvailableRoomsCount($user, $now)
+    {
+        $today = (int)$now->dayOfWeekIso;
+        $currentTime = $now->format('H:i');
+        $currentDate = $now->toDateString();
+        $currentSlot = $this->timeToSlot($currentTime);
+
+        $busyRoomIds = TimetableEntry::where('day_of_week', $today)
+            ->where('slot', $currentSlot)
+            ->whereHas('timetable', function($q) use ($user) {
+                $q->where('institution_id', $user->institution_id)
+                  ->where('status', 'published');
+            })
+            ->pluck('room_id');
+
+        $bookingBusyRoomIds = \App\Models\RoomBooking::where('institution_id', $user->institution_id)
+            ->where('status', 'active')
+            ->where('booking_date', $currentDate)
+            ->where('start_time', '<=', $currentTime . ':59')
+            ->where('end_time', '>', $currentTime)
+            ->pluck('room_id');
+
+        $allBusyRoomIds = $busyRoomIds->merge($bookingBusyRoomIds)->unique();
+
+        return \App\Models\Room::where('institution_id', $user->institution_id)
+            ->whereNotIn('id', $allBusyRoomIds)
+            ->count();
     }
 
     /**
@@ -100,20 +193,85 @@ class StudentController extends Controller
                 $q->where('institution_id', $user->institution_id)
                   ->where('status', 'published');
             })
-            ->orderBy('day_of_week')
-            ->orderBy('slot')
             ->get();
 
-        $entriesByDay = $entries->groupBy('day_of_week')->map(function ($col) {
-            return $col->sortBy('slot')->values();
+        // Enforce academic year retrieval with fallback
+        $entries = $entries->map(function($entry) {
+            $cuy = \Illuminate\Support\Facades\DB::table('course_unit_year')
+                ->where('course_id', $entry->course_id)
+                ->where('unit_id', $entry->unit_id)
+                ->first();
+            
+            // Priority: course_unit_year pivot > Timetable model > "N/A"
+            $entry->academic_year = $cuy->academic_year ?? $entry->timetable->academic_year ?? 'N/A';
+            return $entry;
         });
 
-        $timetables = Timetable::where('institution_id', $user->institution_id)
-            ->where('status', 'published')
-            ->latest()
-            ->get();
+        // Pivot into Matrix: matrix[day][slot][programKey]
+        $matrix = [];
+        $programs = [];
+        
+        foreach ($entries as $entry) {
+            // Prefer the official course code if available, fallback to manual abbreviation
+            $courseName = !empty($entry->course->code) 
+                ? strtoupper($entry->course->code) 
+                : $this->abbreviateCourseName($entry->course->name ?? 'Unknown Course');
+                
+            $academicYear = $entry->academic_year ?? $entry->timetable->academic_year ?? 'N/A';
+            
+            // Key by Course first, then year for program-major sorting
+            $key = $courseName . ' | ' . $academicYear;
+            
+            if (!isset($programs[$key])) {
+                $programs[$key] = [
+                    'course' => $courseName,
+                    'year' => $academicYear,
+                ];
+            }
+            
+            $matrix[$entry->day_of_week][$entry->slot][$key] = $entry;
+        }
 
-        return view('student.timetable-full', compact('entries', 'entriesByDay', 'timetables', 'user'));
+        // Sort programs naturally by Course then Year
+        uksort($programs, function($a, $b) {
+            return strnatcmp($a, $b);
+        });
+
+        // Group programs by course before chunking
+        $programsByCourse = [];
+        foreach ($programs as $key => $details) {
+            $course = $details['course'];
+            $programsByCourse[$course][$key] = $details;
+        }
+
+        // Chunk within each course to maintain separation
+        $programChunks = [];
+        foreach ($programsByCourse as $course => $coursePrograms) {
+            $chunks = array_chunk($coursePrograms, 8, true);
+            foreach ($chunks as $chunk) {
+                // Attach course info for Web headers
+                $programChunks[] = [
+                    'course' => $course,
+                    'programs' => $chunk
+                ];
+            }
+        }
+
+        $days = [1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday'];
+        $slots = [
+            1 => '7:00-10:00', 
+            2 => '10:00-13:00', 
+            3 => '13:00-16:00', 
+            4 => '16:00-19:00'
+        ];
+
+        return view('student.timetable-full', [
+            'programChunks' => $programChunks,
+            'matrix' => $matrix,
+            'days' => $days,
+            'slots' => $slots,
+            'user' => $user
+        ]);
     }
 
     /**
@@ -130,39 +288,31 @@ class StudentController extends Controller
 
             // Very simple real-time availability: show rooms not used in the current slot
             $now = now()->setTimezone('Africa/Nairobi'); // Set to East Africa Time (UTC+3)
-            $dayOfWeek = (int)$now->format('w'); // 0=Sunday, 1=Monday, ..., 6=Saturday
+            $dayOfWeekIso = (int)$now->dayOfWeekIso; // 1 (Mon) - 7 (Sun)
             $hour = (int)$now->format('H');
             
             // Logical time slot calculation
-            $day = $dayOfWeek;
-            $slot = 1; // Default
-            
-            if ($dayOfWeek >= 1 && $dayOfWeek <= 5) { // Weekdays only (1=Monday to 5=Friday)
+            $day = $dayOfWeekIso;
+            if ($dayOfWeekIso >= 1 && $dayOfWeekIso <= 5) { // Weekdays only
                 if ($hour >= 7 && $hour < 10) {
-                    $slot = 1; // 7:00am-10:00am
+                    $activeSlot = 1;
                 } elseif ($hour >= 10 && $hour < 13) {
-                    $slot = 2; // 10:00am-1:00pm
+                    $activeSlot = 2;
                 } elseif ($hour >= 13 && $hour < 16) {
-                    $slot = 3; // 1:00pm-4:00pm
+                    $activeSlot = 3;
                 } elseif ($hour >= 16 && $hour < 19) {
-                    $slot = 4; // 4:00pm-7:00pm
-                } else {
-                    // Outside class hours (before 7am or after 7pm)
-                    $slot = 0; // No active slot
+                    $activeSlot = 4;
                 }
-            } else {
-                // Weekend - no scheduled classes
-                $slot = 0; // No active slot
             }
             
             // Only check timetable entries if we're in an active time slot on weekdays
             $busyRoomIds = collect();
-            if ($dayOfWeek >= 1 && $dayOfWeek <= 5 && $slot > 0) {
+            if ($dayOfWeekIso >= 1 && $dayOfWeekIso <= 5 && $activeSlot >= 1 && $activeSlot <= 4) {
                 $busyRoomIds = TimetableEntry::where('day_of_week', $day)
-                    ->where('slot', $slot)
+                    ->where('slot', $activeSlot)
                     ->whereHas('timetable', function($q) use ($user) {
                         $q->where('institution_id', $user->institution_id)
-                          ->whereIn('status', ['approved', 'published']);
+                          ->where('status', 'published');
                     })
                     ->pluck('room_id');
             }
@@ -175,7 +325,7 @@ class StudentController extends Controller
             $bookingBusyRoomIds = \App\Models\RoomBooking::where('institution_id', $user->institution_id)
                 ->where('status', 'active')
                 ->where('booking_date', $currentDate)
-                ->where('start_time', '<=', $currentTime)
+                ->where('start_time', '<=', $currentTime . ':59')
                 ->where('end_time', '>', $currentTime) // Only currently active bookings
                 ->pluck('room_id');
 
@@ -191,20 +341,8 @@ class StudentController extends Controller
                 ->orderBy('name')
                 ->get();
 
-            // Handle AJAX requests for real-time updates
-            if ($request->ajax() || $request->header('X-Requested-With') === 'XMLHttpRequest') {
-                return response()->json([
-                    'available_rooms' => $availableRooms,
-                    'total_rooms' => $allRooms->count(),
-                    'available_count' => $availableRooms->count(),
-                    'timestamp' => $now->format('H:i:s'),
-                    'day' => $day,
-                    'slot' => $slot,
-                    'is_active_slot' => $slot > 0
-                ]);
-            }
-
-            return view('student.rooms', compact('user', 'availableRooms', 'allRooms', 'day', 'slot', 'now'));
+            // Returning full view as the JS expects HTML to extract the container
+            return view('student.rooms', compact('user', 'availableRooms', 'allRooms', 'day', 'activeSlot', 'now'));
             
         } catch (\Exception $e) {
             // Fallback: show all rooms if there's an error
@@ -230,7 +368,7 @@ class StudentController extends Controller
                 'availableRooms' => $allRooms,
                 'allRooms' => $allRooms,
                 'day' => now()->dayOfWeekIso,
-                'slot' => 0,
+                'activeSlot' => 0,
                 'now' => now()
             ]);
         }
@@ -242,132 +380,35 @@ class StudentController extends Controller
     public function chatbot(Request $request)
     {
         $user = $request->user();
-        $query = strtolower((string)$request->input('q', ''));
+        $query = $request->input('q', '');
 
-        // Log the query
+        if (empty($query)) {
+            return response()->json(['answer' => 'Please ask me something about your schedule, classes, or available rooms.']);
+        }
+
+        $aiService = new \App\Services\StudentAIService();
+        $answer = $aiService->generateResponse($query, $user);
+
+        // Log the query and response
         \App\Models\ChatLog::create([
             'user_id' => $user->id,
             'role' => $user->role,
             'query' => $query,
-            'response' => '', // Will be filled below
+            'response' => $answer,
         ]);
 
-        // "When is my next lecture?"
-        if (str_contains($query, 'next lecture') || str_contains($query, 'next class')) {
-            $nextLecture = $this->getNextLecture($user);
-            if ($nextLecture) {
-                $dayName = $this->days[$nextLecture->day_of_week] ?? 'Unknown';
-                $timeSlot = $this->timeSlots[$nextLecture->slot] ?? 'Unknown';
-                $answer = sprintf(
-                    'Your next lecture is %s (%s) in %s on %s, %s.',
-                    $nextLecture->unit->code ?? 'Unknown',
-                    $nextLecture->unit->name ?? 'Unknown',
-                    $nextLecture->room->name ?? 'TBA',
-                    $dayName,
-                    $timeSlot
-                );
-            } else {
-                $answer = 'You have no upcoming lectures.';
-            }
-            
-            // Log the response
-            \App\Models\ChatLog::create([
-                'user_id' => $user->id,
-                'role' => $user->role,
-                'query' => $query,
-                'response' => $answer,
-            ]);
-            
-            return response()->json(['answer' => $answer]);
-        }
+        return response()->json(['answer' => $answer]);
+    }
 
-        // "Which room is free now?"
-        if (str_contains($query, 'room') && (str_contains($query, 'free') || str_contains($query, 'available'))) {
-            $now = now();
-            $day = max(1, min(5, (int)$now->dayOfWeekIso));
-            $slot = $this->timeToSlot($now->format('H:i'));
-
-            $busyRoomIds = TimetableEntry::where('day_of_week', $day)
-                ->where('slot', $slot)
-                ->whereHas('timetable', function($q) use ($user) {
-                    $q->where('institution_id', $user->institution_id)
-                      ->where('status', 'published');
-                })
-                ->pluck('room_id');
-
-            // Also check room bookings
-            $bookingBusyRoomIds = \App\Models\RoomBooking::where('institution_id', $user->institution_id)
-                ->where('status', 'active')
-                ->where('booking_date', $now->toDateString())
-                ->where(function($q) use ($now) {
-                    $q->where('start_time', '<=', $now->format('H:i:s'))
-                      ->where('end_time', '>=', $now->format('H:i:s'));
-                })
-                ->pluck('room_id');
-
-            $allBusyRoomIds = $busyRoomIds->merge($bookingBusyRoomIds)->unique();
-
-            $availableRooms = Room::where('institution_id', $user->institution_id)
-                ->whereNotIn('id', $allBusyRoomIds)
-                ->orderBy('name')
-                ->limit(10)
-                ->pluck('name');
-
-            if ($availableRooms->isNotEmpty()) {
-                $answer = 'Available rooms right now: ' . $availableRooms->implode(', ');
-            } else {
-                $answer = 'No rooms are currently available.';
-            }
-            
-            // Log the response
-            \App\Models\ChatLog::create([
-                'user_id' => $user->id,
-                'role' => $user->role,
-                'query' => $query,
-                'response' => $answer,
-            ]);
-            
-            return response()->json(['answer' => $answer]);
-        }
-
-        // "Who teaches SIT401?" or similar unit code queries
-        if (preg_match('/who\s+teaches\s+([A-Z0-9]+)/i', $query, $matches)) {
-            $unitCode = strtoupper($matches[1] ?? '');
-                $unit = Unit::where('code', $unitCode)
-                    ->whereHas('timetableEntries.timetable', function($q) use ($user) {
-                        $q->where('institution_id', $user->institution_id)
-                          ->where('status', 'published');
-                    })
-                    ->first();
-
-            if ($unit) {
-                // Get lecturers teaching this unit
-                $lecturers = TimetableEntry::where('unit_id', $unit->id)
-                    ->whereHas('timetable', function($q) use ($user) {
-                        $q->where('institution_id', $user->institution_id)
-                          ->where('status', 'published');
-                    })
-                    ->with('lecturer')
-                    ->get()
-                    ->pluck('lecturer.name')
-                    ->filter()
-                    ->unique()
-                    ->values();
-
-                if ($lecturers->isNotEmpty()) {
-                    $answer = sprintf('%s is taught by: %s', $unitCode, $lecturers->implode(', '));
-                } else {
-                    $answer = sprintf('%s is in the system but no lecturer is currently assigned.', $unitCode);
-                }
-            } else {
-                $answer = sprintf('Unit %s not found in your institution.', $unitCode);
-            }
-            return response()->json(['answer' => $answer]);
-        }
-
-        return response()->json([
-            'answer' => 'Sorry, I did not understand. Try: "When is my next lecture?", "Which room is free now?", or "Who teaches SIT401?"'
-        ]);
+    /**
+     * Clear chatbot history
+     */
+    public function clearChat(Request $request)
+    {
+        $user = $request->user();
+        \App\Models\ChatLog::where('user_id', $user->id)->delete();
+        
+        return response()->json(['message' => 'Chat history cleared.']);
     }
 
     /**
@@ -486,36 +527,98 @@ class StudentController extends Controller
      */
     private function getNextLecture($user)
     {
-        $now = now();
-        $currentDay = max(1, min(5, (int)$now->dayOfWeekIso));
-        $currentSlot = $this->timeToSlot($now->format('H:i'));
+        $now = now()->setTimezone('Africa/Nairobi');
+        $currentDay = (int)$now->dayOfWeekIso; // 1 (Mon) to 7 (Sun)
+        $currentTime = $now->format('H:i');
 
+        // If it's a weekend, Monday's first class is the next lecture
+        if ($currentDay >= 6) {
+            return $this->getStudentTimetableEntries($user)->sortBy(['day_of_week', 'slot'])->first();
+        }
+
+        $currentSlot = $this->timeToSlot($currentTime);
         $entries = $this->getStudentTimetableEntries($user);
 
-        // Find next entry (same day later slot, or later day)
-        $nextEntry = $entries->first(function($entry) use ($currentDay, $currentSlot) {
-            if ($entry->day_of_week > $currentDay) {
-                return true;
+        // Find next entry:
+        // 1. Same day, later slot
+        // 2. Later day this week
+        // 3. Next week (if no entries left this week)
+        
+        $nextEntry = $entries->first(function($entry) use ($currentDay, $currentSlot, $currentTime) {
+            // Same day, strictly later slot
+            if ($entry->day_of_week == $currentDay) {
+                // If we are currently IN a slot, the next one MUST have a higher slot number
+                return $entry->slot > $currentSlot;
             }
-            if ($entry->day_of_week == $currentDay && $entry->slot > $currentSlot) {
-                return true;
-            }
-            return false;
+            // Later day this week
+            return $entry->day_of_week > $currentDay;
         });
+
+        // Special case: If it's before any class has started today, the first class today is the next one
+        if (!$nextEntry && $currentDay <= 5 && $currentTime < '07:00') {
+            $nextEntry = $entries->where('day_of_week', $currentDay)->sortBy('slot')->first();
+        }
+
+        // Final fallback: First class of the week (wrap around)
+        if (!$nextEntry) {
+            $nextEntry = $entries->sortBy(['day_of_week', 'slot'])->first();
+        }
 
         return $nextEntry;
     }
 
     /**
-     * Convert time to slot number
+     * Convert time to slot number with precision
      */
     private function timeToSlot(string $time): int
     {
-        $t = strtotime($time);
-        $h = (int)date('H', $t);
-        if ($h < 10) return 1;
-        if ($h < 13) return 2;
-        if ($h < 16) return 3;
-        return 4;
+        // 1: 07:00 - 09:59
+        // 2: 10:00 - 12:59
+        // 3: 13:00 - 15:59
+        // 4: 16:00 - 18:59
+        // Beyond 19:00, we're past all slots (return 5 to ensure slot > currentSlot logic works)
+        
+        if ($time < '07:00') return 0;
+        if ($time < '10:00') return 1;
+        if ($time < '13:00') return 2;
+        if ($time < '16:00') return 3;
+        if ($time < '19:00') return 4;
+        return 5; 
+    }
+
+    /**
+     * Abbreviate long course names to save space in dense views.
+     */
+    private function abbreviateCourseName($name)
+    {
+        $replacements = [
+            'Bachelor of Science in Software Engineering' => 'BSE',
+            'Bachelor of Science Software Engineering' => 'BSE',
+            'Software Engineering' => 'BSE',
+            
+            'Bachelor of Science in Computer Science' => 'BCS',
+            'Bachelor of Science Computer Science' => 'BCS',
+            'Computer Science' => 'BCS',
+            
+            'Bachelor of Science in Computer Technology' => 'BST',
+            'Bachelor of Science Computer Technology' => 'BST',
+            'Computer Technology' => 'BST',
+            
+            'Bachelor of Business Information Technology' => 'BBIT',
+            'Business Information Technology' => 'BBIT',
+            
+            'Bachelor of Science in Information Technology' => 'BIT',
+            'Bachelor of Science Information Technology' => 'BIT',
+            'Information Technology' => 'BIT',
+            
+            'Bachelor of Commerce ' => 'BCOM ',
+            'Bachelor of Business Administration' => 'BBA',
+            'Bachelor of Arts in ' => 'BA ',
+            'Analytical Chemistry' => 'AC',
+            'Industrial Chemistry' => 'IC',
+        ];
+
+        $abbr = str_ireplace(array_keys($replacements), array_values($replacements), $name);
+        return trim($abbr);
     }
 }

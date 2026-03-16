@@ -12,6 +12,14 @@ use Barryvdh\DomPDF\Facade\Pdf;
 
 class SuperAdminController extends Controller
 {
+    protected $days = [
+        1 => 'Monday',
+        2 => 'Tuesday',
+        3 => 'Wednesday',
+        4 => 'Thursday',
+        5 => 'Friday',
+    ];
+
     public function index()
     {
         $stats = [
@@ -150,9 +158,64 @@ class SuperAdminController extends Controller
             abort(404);
         }
 
-        $timetable->load(['institution', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer']);
+        $timetable->load(['institution', 'department', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer', 'entries.teachingGroup']);
         
-        return view('super-admin.timetable-view', compact('timetable'));
+        $matrix = [];
+        $programs = [];
+        $entries = $timetable->entries;
+
+        $entries = $entries->map(function($entry) {
+            $cuy = DB::table('course_unit_year')
+                ->where('course_id', $entry->course_id)
+                ->where('unit_id', $entry->unit_id)
+                ->first();
+            
+            $entry->academic_year_val = $cuy->academic_year ?? $entry->timetable->academic_year ?? 'N/A';
+            return $entry;
+        });
+
+        foreach ($entries as $entry) {
+            $courseCode = !empty($entry->course->code) 
+                ? strtoupper($entry->course->code) 
+                : $this->abbreviateCourseName($entry->course->name ?? 'Unknown Course');
+                
+            $academicYear = $entry->academic_year_val;
+            $key = $courseCode . ' | ' . $academicYear;
+            
+            if (!isset($programs[$key])) {
+                $programs[$key] = [
+                    'course' => $courseCode,
+                    'year' => $academicYear,
+                ];
+            }
+            $matrix[$entry->day_of_week][$entry->slot][$key] = $entry;
+        }
+
+        uksort($programs, function($a, $b) {
+            return strnatcmp($a, $b);
+        });
+
+        $programsByCourse = [];
+        foreach ($programs as $key => $details) {
+            $course = $details['course'];
+            $programsByCourse[$course][$key] = $details;
+        }
+
+        $programChunks = [];
+        foreach ($programsByCourse as $course => $coursePrograms) {
+            $chunks = array_chunk($coursePrograms, 7, true);
+            foreach ($chunks as $chunk) {
+                $programChunks[] = [
+                    'course' => $course,
+                    'programs' => $chunk
+                ];
+            }
+        }
+
+        $days = $this->days;
+        $slots = [1 => '7:00-10:00', 2 => '10:00-13:00', 3 => '13:00-16:00', 4 => '16:00-19:00'];
+
+        return view('super-admin.timetable-view', compact('timetable', 'matrix', 'programChunks', 'days', 'slots'));
     }
 
     public function downloadTimetable(\App\Models\Timetable $timetable)
@@ -161,12 +224,87 @@ class SuperAdminController extends Controller
             abort(404);
         }
 
-        $timetable->load(['institution', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer']);
+        $timetable->load(['institution', 'department', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer', 'entries.teachingGroup']);
         
-        $pdf = Pdf::loadView('institution-admin.timetables.pdf', compact('timetable'));
+        $user = auth()->user();
+        
+        $matrix = [];
+        $programs = [];
+        $entries = $timetable->entries;
+
+        $entries = $entries->map(function($entry) {
+            $cuy = DB::table('course_unit_year')
+                ->where('course_id', $entry->course_id)
+                ->where('unit_id', $entry->unit_id)
+                ->first();
+            
+            $entry->academic_year_val = $cuy->academic_year ?? $entry->timetable->academic_year ?? 'N/A';
+            return $entry;
+        });
+
+        foreach ($entries as $entry) {
+            $courseCode = !empty($entry->course->code) 
+                ? strtoupper($entry->course->code) 
+                : $this->abbreviateCourseName($entry->course->name ?? 'Unknown Course');
+                
+            $academicYear = $entry->academic_year_val;
+            $key = $courseCode . ' | ' . $academicYear;
+            
+            if (!isset($programs[$key])) {
+                $programs[$key] = [
+                    'course' => $courseCode,
+                    'year' => $academicYear,
+                ];
+            }
+            $matrix[$entry->day_of_week][$entry->slot][$key] = $entry;
+        }
+
+        uksort($programs, function($a, $b) {
+            return strnatcmp($a, $b);
+        });
+
+        $programsByCourse = [];
+        foreach ($programs as $key => $details) {
+            $course = $details['course'];
+            $programsByCourse[$course][$key] = $details;
+        }
+
+        $programChunks = [];
+        foreach ($programsByCourse as $course => $coursePrograms) {
+            $chunks = array_chunk($coursePrograms, 7, true);
+            foreach ($chunks as $chunk) {
+                $programChunks[] = [
+                    'course' => $course,
+                    'programs' => $chunk
+                ];
+            }
+        }
+
+        $days = $this->days;
+        $slots = [1 => '7:00-10:00', 2 => '10:00-13:00', 3 => '13:00-16:00', 4 => '16:00-19:00'];
+        $title = 'Official Institutional Timetable';
+        $isInstitutional = true;
+
+        $pdf = Pdf::loadView('institution-admin.timetables.pdf', [
+            'timetable' => $timetable,
+            'matrix' => $matrix,
+            'programChunks' => $programChunks,
+            'days' => $days,
+            'slots' => $slots,
+            'user' => $user,
+            'title' => $title,
+            'isInstitutional' => $isInstitutional
+        ]);
+        
         $pdf->setPaper('A4', 'landscape');
+        $pdf->setOptions([
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled' => true,
+            'defaultFont' => 'Arial'
+        ]);
         
-        $filename = 'Timetable_' . $timetable->institution->name . '_' . $timetable->name . '_' . now()->format('Y-m-d') . '.pdf';
+        $baseFilename = 'Timetable_' . $timetable->institution->name . '_' . $timetable->name;
+        $filename = $baseFilename . '_' . now()->format('Y-m-d') . '.pdf';
         
         return $pdf->download($filename);
     }
@@ -413,5 +551,49 @@ class SuperAdminController extends Controller
         };
 
         return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * Abbreviate long course names to save space in dense views.
+     */
+    private function abbreviateCourseName($name)
+    {
+        $replacements = [
+            'Bachelor of Science in Software Engineering' => 'BSE',
+            'Bachelor of Science Software Engineering' => 'BSE',
+            'Software Engineering' => 'BSE',
+            
+            'Bachelor of Science in Computer Science' => 'BCS',
+            'Bachelor of Science Computer Science' => 'BCS',
+            'Computer Science' => 'BCS',
+            
+            'Bachelor of Science in Computer Technology' => 'BST',
+            'Bachelor of Science Computer Technology' => 'BST',
+            'Computer Technology' => 'BST',
+            
+            'Bachelor of Business Information Technology' => 'BBIT',
+            'Business Information Technology' => 'BBIT',
+            
+            'Bachelor of Science in Information Technology' => 'BIT',
+            'Bachelor of Science Information Technology' => 'BIT',
+            'Information Technology' => 'BIT',
+        ];
+
+        foreach ($replacements as $long => $short) {
+            if (stripos($name, $long) !== false) {
+                return $short;
+            }
+        }
+
+        // Generic abbreviation if no match
+        $words = explode(' ', str_replace(['(', ')', '-', '/'], ' ', $name));
+        $abbr = '';
+        foreach ($words as $word) {
+            if (strlen($word) > 2 && !in_array(strtolower($word), ['and', 'for', 'the', 'with'])) {
+                $abbr .= strtoupper($word[0]);
+            }
+        }
+        
+        return !empty($abbr) ? $abbr : strtoupper(substr($name, 0, 3));
     }
 }

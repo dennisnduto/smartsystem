@@ -32,33 +32,39 @@
         return $entry;
     });
 
-    // Group entries by course, then by academic year
-    $grouped = $entriesWithYear->groupBy(function($entry) {
-        return $entry->course_id . '_' . ($entry->academic_year ?? 'unknown');
-    });
-
-    // Organize into course -> year structure
+    // Organize into course -> year structure using manual grouping for maximum robustness
     $coursesByYear = [];
-    foreach ($grouped as $key => $entries) {
-        $firstEntry = $entries->first();
-        $courseId = $firstEntry->course_id;
-        $courseName = $firstEntry->course->name ?? 'Unknown Course';
-        $academicYear = $firstEntry->academic_year ?? 'Unknown';
+    foreach ($entriesWithYear as $entry) {
+        $rawName = $entry->course->name ?? 'Unknown Course';
         
-        if (!isset($coursesByYear[$courseId])) {
-            $coursesByYear[$courseId] = [
-                'id' => $courseId,
-                'name' => $courseName,
+        // Manual normalization: collapse all whitespace sequences and uppercase
+        // handle common NBSP variants that simple trim() misses
+        $cleanName = str_replace(["\xc2\xa0", "\xa0", "&nbsp;"], ' ', $rawName);
+        $normalizedName = strtoupper(trim(preg_replace('/\s+/', ' ', $cleanName)));
+        
+        if (empty($normalizedName)) {
+            $normalizedName = 'UNKNOWN COURSE';
+        }
+
+        if (!isset($coursesByYear[$normalizedName])) {
+            $coursesByYear[$normalizedName] = [
+                'id' => $entry->course_id,
+                'name' => trim($rawName), // Display name from the first match
                 'years' => []
             ];
         }
         
-        $yearLabel = $academicYear ? 'Year ' . substr($academicYear, 1) : 'Unknown Year';
-        $coursesByYear[$courseId]['years'][$academicYear] = [
-            'year' => $academicYear,
-            'year_label' => $yearLabel,
-            'entries' => $entries
-        ];
+        $academicYear = $entry->academic_year ?? 'Unknown';
+        if (!isset($coursesByYear[$normalizedName]['years'][$academicYear])) {
+            $yearLabel = $academicYear ? 'Year ' . substr($academicYear, 1) : 'Unknown Year';
+            $coursesByYear[$normalizedName]['years'][$academicYear] = [
+                'year' => $academicYear,
+                'year_label' => $yearLabel,
+                'entries' => collect([])
+            ];
+        }
+
+        $coursesByYear[$normalizedName]['years'][$academicYear]['entries']->push($entry);
     }
 
     // Sort courses by name, and years within each course
@@ -69,6 +75,7 @@
     foreach ($coursesByYear as &$course) {
         ksort($course['years']);
     }
+    unset($course);
 @endphp
 
 <div id="tt-container" class="bg-white min-h-screen">
@@ -115,20 +122,30 @@
         </div>
     @else
         <!-- Course Navigation -->
-        <div class="bg-gray-50 border-b px-6 py-4 print:hidden sticky top-0 z-20 shadow-sm">
-            <h3 class="text-lg font-semibold text-gray-900 mb-3">Quick Navigation</h3>
-            <div class="flex flex-wrap gap-2">
-                @foreach($coursesByYear as $course)
-                    @foreach($course['years'] as $yearData)
-                        <a href="#course-{{ $course['id'] }}-year-{{ $yearData['year'] }}" 
-                           class="bg-white border border-gray-300 rounded-lg px-4 py-2 text-sm font-medium text-gray-700 hover:bg-indigo-50 hover:border-indigo-400 hover:text-indigo-700 transition-all">
-                            {{ $course['name'] }} - {{ $yearData['year_label'] }}
-                            <span class="ml-2 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">
-                                {{ $yearData['entries']->count() }} units
+        <div class="bg-white/80 backdrop-blur-md border-b px-6 py-4 print:hidden sticky top-0 z-30 shadow-sm border border-indigo-100/50">
+            <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h3 class="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-1">Quick Navigation</h3>
+                    <p class="text-sm text-gray-500">Jump to a specific program and year</p>
+                </div>
+                <div class="flex flex-wrap gap-3 items-center">
+                    @foreach($coursesByYear as $course)
+                        <div class="flex items-center bg-gray-50 border border-gray-200 rounded-lg overflow-hidden transition-all hover:border-indigo-300 hover:shadow-sm">
+                            <span class="px-3 py-1.5 text-sm font-bold text-gray-800 bg-white border-r truncate max-w-[150px]" title="{{ $course['name'] }}">
+                                {{ $course['name'] }}
                             </span>
-                        </a>
+                            <div class="flex p-1 gap-1">
+                                @foreach($course['years'] as $yearData)
+                                    <a href="#course-{{ $course['id'] }}-year-{{ $yearData['year'] }}" 
+                                       class="px-2 py-1 text-[10px] font-bold rounded uppercase transition-all bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white"
+                                       title="Jump to {{ $yearData['year_label'] }}">
+                                        {{ substr($yearData['year_label'], 0, 2) }}{{ substr($yearData['year_label'], -1) }}
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
                     @endforeach
-                @endforeach
+                </div>
             </div>
         </div>
 
@@ -137,21 +154,40 @@
             @foreach($coursesByYear as $course)
                 <div class="course-section">
                     <!-- Course Header -->
-                    <div class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl p-6 mb-6 shadow-lg">
-                        <h2 class="text-3xl font-bold">{{ $course['name'] }}</h2>
-                        <p class="text-indigo-100 mt-2 text-lg">
-                            {{ count($course['years']) }} Year(s) • 
-                            {{ collect($course['years'])->sum(fn($y) => $y['entries']->count()) }} Total Units
-                        </p>
+                    <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-2xl p-8 mb-8 shadow-xl relative overflow-hidden group">
+                        <!-- Decorative circle -->
+                        <div class="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl transition-all group-hover:scale-110"></div>
+                        
+                        <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h2 class="text-3xl font-extrabold tracking-tight">{{ $course['name'] }}</h2>
+                                <div class="flex items-center gap-4 mt-3 text-indigo-100 font-medium">
+                                    <span class="flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-full text-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.168.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                                        {{ count($course['years']) }} Academic Year(s)
+                                    </span>
+                                    <span class="flex items-center gap-1.5 bg-white/20 px-3 py-1 rounded-full text-sm">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                                        {{ collect($course['years'])->sum(fn($y) => $y['entries']->count()) }} Total Sessions
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="hidden md:block">
+                                <div class="text-6xl opacity-20">🎓</div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Year Sections -->
                     @foreach($course['years'] as $yearData)
                         <div id="course-{{ $course['id'] }}-year-{{ $yearData['year'] }}" class="year-section mb-8">
                             <!-- Year Header -->
-                            <div class="bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg p-4 mb-4 shadow-md">
-                                <h3 class="text-2xl font-bold">{{ $yearData['year_label'] }}</h3>
-                                <p class="text-blue-100 mt-1">{{ $yearData['entries']->count() }} units scheduled</p>
+                            <div class="flex items-center gap-3 mb-4 mt-12">
+                                <div class="h-8 w-1.5 bg-indigo-500 rounded-full"></div>
+                                <h3 class="text-xl font-bold text-gray-900">{{ $yearData['year_label'] }}</h3>
+                                <span class="bg-indigo-50 text-indigo-700 px-3 py-0.5 rounded-full text-xs font-bold border border-indigo-100">
+                                    {{ $yearData['entries']->count() }} Sessions
+                                </span>
                             </div>
 
                             <!-- Year Timetable -->

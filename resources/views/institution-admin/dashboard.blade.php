@@ -301,64 +301,144 @@
             </div>
 
             <!-- AI Assistant Chatbot -->
-            <div class="bg-white overflow-hidden shadow-lg rounded-xl">
-                <div class="p-6">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center justify-between">
-                        🤖 AI Assistant
-                        <div class="flex items-center">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2">
-                                Online
-                            </span>
-                            <button onclick="clearInstitutionChat()" class="text-gray-400 hover:text-gray-600">
-                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                </svg>
-                            </button>
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap');
+                
+                .glass-admin {
+                    background: rgba(255, 255, 255, 0.75);
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    border: 1px solid rgba(255, 255, 255, 0.4);
+                }
+                
+                .chat-bubble-admin-user {
+                    background: linear-gradient(135deg, #4f46e5, #4338ca);
+                    border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
+                    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.2);
+                    color: white;
+                }
+                
+                .chat-bubble-admin-bot {
+                    background: white;
+                    border-radius: 1.25rem 1.25rem 1.25rem 0.25rem;
+                    border: 1px solid rgba(0, 0, 0, 0.05);
+                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+                    color: #1e293b;
+                }
+                
+                .chat-scroll-admin {
+                    scrollbar-width: thin;
+                    scrollbar-color: rgba(99, 102, 241, 0.2) transparent;
+                }
+                
+                .chat-scroll-admin::-webkit-scrollbar {
+                    width: 4px;
+                }
+                
+                .chat-scroll-admin::-webkit-scrollbar-thumb {
+                    background-color: rgba(99, 102, 241, 0.2);
+                    border-radius: 20px;
+                }
+
+                @keyframes revealUp {
+                    from { opacity: 0; transform: translateY(20px) scale(0.98); }
+                    to { opacity: 1; transform: translateY(0) scale(1); }
+                }
+
+                .msg-reveal {
+                    animation: revealUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+                }
+
+                .typing-pulse {
+                    width: 5px;
+                    height: 5px;
+                    background: #6366f1;
+                    border-radius: 50%;
+                    animation: pulseGrow 1.2s infinite ease-in-out both;
+                }
+
+                .typing-pulse:nth-child(2) { animation-delay: 0.15s; }
+                .typing-pulse:nth-child(3) { animation-delay: 0.3s; }
+
+                @keyframes pulseGrow {
+                    0%, 80%, 100% { transform: scale(0.5); opacity: 0.4; }
+                    40% { transform: scale(1.1); opacity: 1; }
+                }
+            </style>
+
+            <div class="glass-admin overflow-hidden shadow-2xl rounded-[2.5rem] border-0 relative">
+                <div class="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+                <div class="p-8">
+                    <div class="flex items-center justify-between mb-8">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-14 h-14 bg-indigo-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner border border-indigo-100">
+                                🌌
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-extrabold text-gray-900 tracking-tight" style="font-family: 'Outfit', sans-serif;">Institution Admin Assistant</h3>
+                                <div class="flex items-center space-x-2">
+                                    <span class="relative flex h-2 w-2">
+                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                        <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                                    </span>
+                                    <span class="text-[10px] font-black text-green-600 uppercase tracking-widest">Live Support</span>
+                                </div>
+                            </div>
                         </div>
-                    </h3>
+                        <button onclick="clearInstitutionChat()" class="p-3 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all duration-300" title="Purge Conversation">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </div>
                     
-                    <div id="institution-chat-container" class="h-64 overflow-y-auto bg-gray-50 rounded-lg p-4 mb-4 border">
-                        <div class="space-y-3" id="institution-chat-messages">
-                            <div class="flex justify-start">
-                                <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-blue-500 text-white shadow-sm">
-                                    <p class="text-sm">👋 Hello! I'm your institution AI assistant. I can help you with:</p>
-                                    <ul class="text-sm mt-2 space-y-1">
-                                        <li>• Generate new timetables</li>
-                                        <li>• Show available rooms</li>
-                                        <li>• Department statistics</li>
-                                        <li>• Lecturer availability</li>
-                                        <li>• Conflict resolution</li>
-                                    </ul>
+                    <div id="institution-chat-container" class="h-96 overflow-y-auto chat-scroll-admin px-2 mb-6">
+                        <div class="space-y-6" id="institution-chat-messages">
+                            <div class="flex justify-start msg-reveal">
+                                <div class="max-w-[85%] px-5 py-4 chat-bubble-admin-bot">
+                                    <p class="text-sm leading-relaxed" style="font-family: 'Inter', sans-serif;">
+                                        Hello! I'm your institution admin assistant. I can help you analyze **timetable metrics**, check **room availability**, and resolve **scheduling conflicts**. How can I help you today?
+                                    </p>
                                 </div>
                             </div>
                         </div>
                     </div>
                     
-                    <form id="institution-chat-form" class="flex space-x-2 mb-4">
-                        <input type="text" 
-                               id="institution-chat-input" 
-                               class="flex-1 border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" 
-                               placeholder="Ask about rooms, timetables, conflicts..."
-                               required>
-                        <button type="submit" 
-                                class="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
-                            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                            </svg>
-                        </button>
+                    <form id="institution-chat-form" class="relative mb-6 group">
+                        <div class="flex items-center bg-white/50 backdrop-blur-md rounded-[1.5rem] p-2 border border-blue-50 focus-within:ring-4 focus-within:ring-indigo-100 focus-within:border-indigo-300 transition-all duration-500">
+                            <input type="text" 
+                                   id="institution-chat-input" 
+                                   class="flex-1 bg-transparent border-0 focus:ring-0 text-sm py-4 px-5 text-gray-800 placeholder-indigo-300 font-medium" 
+                                   placeholder="Initiate command or ask a question..."
+                                   required autocomplete="off">
+                            <button type="submit" 
+                                    class="bg-indigo-600 hover:bg-indigo-700 text-white p-4 rounded-2xl shadow-xl shadow-indigo-200 transition-all hover:-translate-y-1 active:scale-95">
+                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                </svg>
+                            </button>
+                        </div>
                     </form>
                     
-                    <!-- Quick Action Buttons -->
-                    <div class="flex flex-wrap gap-2">
-                        <button onclick="askInstitutionQuestion('Show available rooms in CS Department')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs transition">
-                            Available Rooms
-                        </button>
-                        <button onclick="askInstitutionQuestion('Generate new timetable')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs transition">
-                            Generate Timetable
-                        </button>
-                        <button onclick="askInstitutionQuestion('Show conflicts')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs transition">
-                            Check Conflicts
-                        </button>
+                    <div class="space-y-6 animate-pulse-slow">
+                        <div>
+                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 ml-1">Quick Directives</p>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="askInstitutionQuestion('Show available rooms')" class="px-4 py-2 bg-white text-indigo-600 border border-indigo-100 rounded-xl text-xs font-bold hover:bg-indigo-600 hover:text-white hover:shadow-lg hover:shadow-indigo-100 transition-all">🏠 Rooms</button>
+                                <button onclick="askInstitutionQuestion('Generate new timetable')" class="px-4 py-2 bg-white text-emerald-600 border border-emerald-100 rounded-xl text-xs font-bold hover:bg-emerald-600 hover:text-white hover:shadow-lg hover:shadow-emerald-100 transition-all">📅 Generate</button>
+                                <button onclick="askInstitutionQuestion('Show conflicts')" class="px-4 py-2 bg-white text-rose-600 border border-rose-100 rounded-xl text-xs font-bold hover:bg-rose-600 hover:text-white hover:shadow-lg hover:shadow-rose-100 transition-all">⚠️ Conflicts</button>
+                                <button onclick="askInstitutionQuestion('Lecturer workload analysis')" class="px-4 py-2 bg-white text-cyan-600 border border-cyan-100 rounded-xl text-xs font-bold hover:bg-cyan-600 hover:text-white hover:shadow-lg hover:shadow-cyan-100 transition-all">👨‍🏫 Workload</button>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 border-t border-gray-100/50">
+                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 ml-1">Advanced Queries</p>
+                            <div class="flex flex-wrap gap-2">
+                                <button onclick="askInstitutionQuestion('Resource efficiency metrics')" class="px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-all">📊 System Efficiency</button>
+                                <button onclick="askInstitutionQuestion('Peak hours analysis')" class="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-lg text-[10px] font-bold hover:bg-purple-100 transition-all">📈 Load Patterns</button>
+                                <button onclick="askInstitutionQuestion('Optimization suggestions')" class="px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-[10px] font-bold hover:bg-amber-100 transition-all">💡 Smart Tuning</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -470,6 +550,7 @@ document.getElementById('institution-chat-form').addEventListener('submit', asyn
     
     const input = document.getElementById('institution-chat-input');
     const messages = document.getElementById('institution-chat-messages');
+    const container = document.getElementById('institution-chat-container');
     const query = input.value.trim();
     
     if (!query) return;
@@ -478,49 +559,72 @@ document.getElementById('institution-chat-form').addEventListener('submit', asyn
     addInstitutionMessage(query, 'user');
     input.value = '';
     
-    // Simulate AI response for institution-specific queries
-    setTimeout(() => {
-        let response = '';
-        const lowerQuery = query.toLowerCase();
+    // Show typing indicator
+    const typingIndicator = document.createElement('div');
+    typingIndicator.className = 'flex justify-start msg-reveal typing-indicator';
+    typingIndicator.innerHTML = `
+        <div class="px-5 py-4 chat-bubble-admin-bot flex items-center space-x-1">
+            <div class="typing-pulse"></div>
+            <div class="typing-pulse"></div>
+            <div class="typing-pulse"></div>
+        </div>
+    `;
+    messages.appendChild(typingIndicator);
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    
+    try {
+        const response = await fetch('{{ route("institution-admin.chatbot") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ q: query })
+        });
         
-        if (lowerQuery.includes('room') && lowerQuery.includes('available')) {
-            response = "🏠 Available rooms:\n• Room 101 (CS Department)\n• Room 205 (Math Department)\n• Lab 301 (Physics Department)";
-        } else if (lowerQuery.includes('generate') && lowerQuery.includes('timetable')) {
-            response = "🚀 To generate a timetable:\n1. Click the 'Generate Timetable' button\n2. Select department\n3. Enter timetable name\n4. Configure courses and lecturers";
-        } else if (lowerQuery.includes('conflict')) {
-            response = "⚠️ Current conflicts:\n• None found in active timetables\n• All lecturers have clear schedules\n• Room assignments are optimized";
-        } else if (lowerQuery.includes('department')) {
-            response = "🏢 Departments overview:\n• {{ $stats['total_departments'] }} total departments\n• {{ $stats['total_courses'] }} courses across all departments\n• All departments are active";
-        } else {
-            response = "I can help you with:\n• Room availability checks\n• Timetable generation\n• Conflict resolution\n• Department statistics\n• Lecturer management";
+        // Remove typing indicator
+        if (messages.contains(typingIndicator)) {
+            messages.removeChild(typingIndicator);
         }
         
-        addInstitutionMessage(response, 'bot');
-    }, 1000);
+        if (response.ok) {
+            const data = await response.json();
+            addInstitutionMessage(data.answer, 'bot');
+        } else {
+            addInstitutionMessage('Sorry, I encountered an error. Please try again.', 'bot');
+        }
+    } catch (error) {
+        if (messages.contains(typingIndicator)) {
+            messages.removeChild(typingIndicator);
+        }
+        console.error('Chatbot error:', error);
+        addInstitutionMessage('Connection error. Please check your internet connection.', 'bot');
+    }
 });
 
 function addInstitutionMessage(text, sender) {
     const messages = document.getElementById('institution-chat-messages');
+    const container = document.getElementById('institution-chat-container');
     const messageDiv = document.createElement('div');
+    messageDiv.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} msg-reveal`;
     
     if (sender === 'user') {
-        messageDiv.className = 'flex justify-end';
         messageDiv.innerHTML = `
-            <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-gray-200 text-gray-800 shadow-sm">
-                <p class="text-sm">${text}</p>
+            <div class="max-w-[85%] px-5 py-4 chat-bubble-admin-user">
+                <p class="text-sm leading-relaxed" style="font-family: 'Inter', sans-serif;">${text}</p>
             </div>
         `;
     } else {
-        messageDiv.className = 'flex justify-start';
         messageDiv.innerHTML = `
-            <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-blue-500 text-white shadow-sm">
-                <p class="text-sm">${text}</p>
+            <div class="max-w-[85%] px-5 py-4 chat-bubble-admin-bot">
+                <p class="text-sm leading-relaxed" style="font-family: 'Inter', sans-serif;">${text}</p>
             </div>
         `;
     }
     
     messages.appendChild(messageDiv);
-    document.getElementById('institution-chat-container').scrollTop = document.getElementById('institution-chat-container').scrollHeight;
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
 }
 
 function askInstitutionQuestion(question) {
@@ -529,22 +633,34 @@ function askInstitutionQuestion(question) {
     document.getElementById('institution-chat-form').dispatchEvent(new Event('submit'));
 }
 
-function clearInstitutionChat() {
-    const messages = document.getElementById('institution-chat-messages');
-    messages.innerHTML = `
-        <div class="flex justify-start">
-            <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-blue-500 text-white shadow-sm">
-                <p class="text-sm">👋 Hello! I'm your institution AI assistant. I can help you with:</p>
-                <ul class="text-sm mt-2 space-y-1">
-                    <li>• Generate new timetables</li>
-                    <li>• Show available rooms</li>
-                    <li>• Department statistics</li>
-                    <li>• Lecturer availability</li>
-                    <li>• Conflict resolution</li>
-                </ul>
-            </div>
-        </div>
-    `;
+async function clearInstitutionChat() {
+    if (!confirm('Are you sure you want to clear your chat history permanently?')) return;
+    
+    try {
+        const response = await fetch('{{ route("institution-admin.chatbot.clear") }}', {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const messages = document.getElementById('institution-chat-messages');
+            messages.innerHTML = `
+                <div class="flex justify-start msg-reveal">
+                    <div class="max-w-[85%] px-5 py-4 chat-bubble-admin-bot">
+                        <p class="text-sm">Conversation history purged. Engaged and ready for new directives.</p>
+                    </div>
+                </div>
+            `;
+        } else {
+            alert('Failed to clear chat history. Please try again.');
+        }
+    } catch (error) {
+        console.error('Clear chat error:', error);
+        alert('Failed to clear chat history. Please check your connection.');
+    }
 }
 
 function showNotification(message, type = 'info') {

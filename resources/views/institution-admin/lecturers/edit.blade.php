@@ -360,12 +360,6 @@ document.addEventListener('DOMContentLoaded', function() {
     form.addEventListener('submit', function(e) {
         const assignments = container.children;
         
-        if (assignments.length === 0) {
-            e.preventDefault();
-            alert('Please add at least one course assignment.');
-            return false;
-        }
-        
         // Check for duplicate course assignments
         const courseIds = [];
         for (let i = 0; i < assignments.length; i++) {

@@ -118,8 +118,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('Room booked successfully!');
                 this.reset();
                 loadBookings();
-                // Refresh page to update available rooms
-                setTimeout(() => window.location.reload(), 1000);
+                // Refresh rooms list via AJAX instead of page reload
+                refreshAvailableRooms();
             } else {
                 alert('Booking failed: ' + (data.message || 'Unknown error'));
             }
@@ -210,12 +210,37 @@ async function cancelBooking(bookingId) {
         if (response.ok) {
             alert('Booking cancelled successfully');
             loadBookings();
-            setTimeout(() => window.location.reload(), 1000);
+            refreshAvailableRooms();
         } else {
             alert('Failed to cancel booking');
         }
     } catch (error) {
         alert('Error: ' + error.message);
+    }
+}
+
+async function refreshAvailableRooms() {
+    try {
+        const response = await fetch(window.location.href, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'text/html'
+            }
+        });
+        
+        if (response.ok) {
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const newRoomsList = doc.querySelector('.divide-y'); // Available rooms container
+            const currentRoomsList = document.querySelector('.divide-y');
+            
+            if (newRoomsList && currentRoomsList) {
+                currentRoomsList.innerHTML = newRoomsList.innerHTML;
+            }
+        }
+    } catch (error) {
+        console.error('Error refreshing rooms:', error);
     }
 }
 </script>

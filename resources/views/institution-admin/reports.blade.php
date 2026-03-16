@@ -276,13 +276,22 @@
 function exportInstitutionReport(format) {
     showNotification(`Generating ${format.toUpperCase()} report for {{ $institution->name }}...`, 'info');
     
-    // Simulate export process
+    // Trigger the actual download
+    const baseUrl = '{{ url("/institution-admin/reports/export") }}';
+    const exportUrl = baseUrl + '/' + format;
+    
+    // Create a temporary link to trigger download
+    const link = document.createElement('a');
+    link.href = exportUrl;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Show success message after a short delay
     setTimeout(() => {
-        showNotification(`${format.toUpperCase()} report generated successfully!`, 'success');
-        
-        // Here you would typically trigger the actual download
-        // window.open(`/institution-admin/reports/export/${format}`, '_blank');
-    }, 2000);
+        showNotification(`${format.toUpperCase()} report download started!`, 'success');
+    }, 1000);
 }
 
 function showNotification(message, type = 'info') {

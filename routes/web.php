@@ -4,10 +4,16 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TimetableController;
 use App\Http\Controllers\Admin\SuperAdminController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return view('welcome');
+    $stats = [
+        'institutions' => \App\Models\Institution::count(),
+        'users' => \App\Models\User::count(),
+        'timetables' => \App\Models\Timetable::count(),
+    ];
+    return view('welcome', compact('stats'));
 });
 
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
@@ -19,6 +25,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Notifications
+    Route::post('/notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('notifications.mark-all-as-read');
+    Route::post('/notifications/{id}/mark-as-read', [NotificationController::class, 'markAsRead'])->name('notifications.mark-as-read');
 });
 
 // Super Admin Routes
@@ -58,10 +68,13 @@ Route::middleware(['auth', 'institution.admin'])->prefix('institution-admin')->n
     // Dashboard
     Route::get('/dashboard', [\App\Http\Controllers\InstitutionAdmin\DashboardController::class, 'index'])->name('dashboard');
     Route::post('/generate-timetable', [\App\Http\Controllers\InstitutionAdmin\DashboardController::class, 'generateTimetable'])->name('generate-timetable');
+    Route::post('/chatbot', [\App\Http\Controllers\InstitutionAdmin\DashboardController::class, 'chatbot'])->name('chatbot');
+    Route::delete('/chatbot/clear', [\App\Http\Controllers\InstitutionAdmin\DashboardController::class, 'clearChat'])->name('chatbot.clear');
     
     // Analytics and Reports
     Route::get('/analytics', [\App\Http\Controllers\InstitutionAdmin\DashboardController::class, 'analytics'])->name('analytics');
     Route::get('/reports', [\App\Http\Controllers\InstitutionAdmin\DashboardController::class, 'reports'])->name('reports');
+    Route::get('/reports/export/{format}', [\App\Http\Controllers\InstitutionAdmin\DashboardController::class, 'exportReport'])->name('reports.export');
     
     // Schools Management
     Route::resource('schools', App\Http\Controllers\InstitutionAdmin\SchoolController::class);
@@ -112,17 +125,24 @@ Route::middleware(['auth', 'institution.admin'])->prefix('institution-admin')->n
     Route::post('timetables/{timetable}/generate-entries', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'generateEntries'])->name('timetables.generate-entries');
     Route::get('timetables/{timetable}/export-pdf', [App\Http\Controllers\InstitutionAdmin\TimetableController::class, 'exportPdf'])->name('timetables.export-pdf');
     Route::resource('timetables', App\Http\Controllers\InstitutionAdmin\TimetableController::class);
+
+    // Conflict Resolution
+    Route::get('timetable-entries/{entry}/suggestions', [\App\Http\Controllers\InstitutionAdmin\TimetableConflictController::class, 'getSuggestions'])->name('timetables.conflicts.suggestions');
+    Route::post('timetable-entries/{entry}/resolve', [\App\Http\Controllers\InstitutionAdmin\TimetableConflictController::class, 'resolve'])->name('timetables.conflicts.resolve');
 });
 
 // Lecturer self-service routes
 Route::middleware(['auth'])->prefix('lecturer')->name('lecturer.')->group(function () {
-    Route::get('dashboard', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'timetable'])->name('dashboard');
+    Route::get('dashboard', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'dashboard'])->name('dashboard');
     Route::get('timetable', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'timetable'])->name('timetable');
     Route::post('availability/toggle', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'toggleAvailability'])->name('availability.toggle');
     Route::get('assigned', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'assigned'])->name('assigned');
     Route::get('rooms', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'rooms'])->name('rooms');
     Route::post('schedule-change', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'requestChange'])->name('schedule.change');
+    Route::get('timetable/full', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'fullTimetable'])->name('timetable.full');
+    Route::get('timetable/full/export/{format}', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'exportFullTimetable'])->name('timetable.full.export');
     Route::post('chatbot', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'chatbot'])->name('chatbot');
+    Route::delete('chatbot/clear', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'clearChat'])->name('chatbot.clear');
     Route::get('export/csv', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'exportCSV'])->name('export.csv');
     Route::get('export/pdf', [App\Http\Controllers\Lecturer\SelfServiceController::class, 'exportPDF'])->name('export.pdf');
     
@@ -133,10 +153,12 @@ Route::middleware(['auth'])->prefix('lecturer')->name('lecturer.')->group(functi
 // Student routes
 Route::middleware(['auth'])->prefix('student')->name('student.')->group(function () {
     Route::get('dashboard', [App\Http\Controllers\Student\StudentController::class, 'dashboard'])->name('dashboard');
+    Route::get('dashboard/stats', [App\Http\Controllers\Student\StudentController::class, 'dashboardStats'])->name('dashboard.stats');
     Route::get('timetable', [App\Http\Controllers\Student\StudentController::class, 'timetable'])->name('timetable');
     Route::get('timetable/full', [App\Http\Controllers\Student\StudentController::class, 'fullTimetable'])->name('timetable.full');
     Route::get('rooms', [App\Http\Controllers\Student\StudentController::class, 'rooms'])->name('rooms');
     Route::post('chatbot', [App\Http\Controllers\Student\StudentController::class, 'chatbot'])->name('chatbot');
+    Route::delete('chatbot/clear', [App\Http\Controllers\Student\StudentController::class, 'clearChat'])->name('chatbot.clear');
     Route::get('timetable/print', [App\Http\Controllers\Student\StudentController::class, 'printTimetable'])->name('timetable.print');
     Route::put('profile', [App\Http\Controllers\Student\StudentController::class, 'updateProfile'])->name('profile.update');
     

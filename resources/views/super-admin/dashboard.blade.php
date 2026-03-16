@@ -280,70 +280,129 @@
                 </div>
 
                 <!-- Enhanced AI Chatbot -->
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                    <div class="p-6 text-gray-900">
-                        <div class="flex items-center justify-between mb-4">
-                            <div class="flex items-center">
-                                <div class="p-2 rounded-full bg-indigo-100 mr-3">
-                                    <svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-3.582 8-8 8a8.959 8.959 0 01-2.58-.37l-3.91 1.2c-.362.112-.94-.258-.97-.8l-.187-3.114A8.001 8.001 0 013 12c0-4.418 3.582-8 8-8s8 3.582 8 8z" />
-                                    </svg>
+                <style>
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap');
+                    
+                    .glass-super {
+                        background: rgba(255, 255, 255, 0.7);
+                        backdrop-filter: blur(15px);
+                        -webkit-backdrop-filter: blur(15px);
+                        border: 1px solid rgba(255, 255, 255, 0.3);
+                    }
+                    
+                    .bubble-super-user {
+                        background: linear-gradient(135deg, #6366f1, #4f46e5);
+                        border-radius: 1.25rem 1.25rem 0.25rem 1.25rem;
+                        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
+                        color: white;
+                    }
+                    
+                    .bubble-super-bot {
+                        background: white;
+                        border-radius: 1.25rem 1.25rem 1.25rem 0.25rem;
+                        border: 1px solid rgba(0, 0, 0, 0.05);
+                        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+                        color: #1e293b;
+                    }
+                    
+                    .scroll-super {
+                        scrollbar-width: thin;
+                        scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
+                    }
+                    
+                    .scroll-super::-webkit-scrollbar {
+                        width: 4px;
+                    }
+                    
+                    .scroll-super::-webkit-scrollbar-thumb {
+                        background-color: rgba(0, 0, 0, 0.1);
+                        border-radius: 20px;
+                    }
+
+                    @keyframes fadeInUp {
+                        from { opacity: 0; transform: translateY(15px); }
+                        to { opacity: 1; transform: translateY(0); }
+                    }
+
+                    .msg-anim {
+                        animation: fadeInUp 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+                    }
+
+                    .typing-pulse-dot {
+                        width: 6px;
+                        height: 6px;
+                        background: #4338ca;
+                        border-radius: 50%;
+                        animation: pulseDot 1.4s infinite ease-in-out both;
+                    }
+
+                    .typing-pulse-dot:nth-child(2) { animation-delay: 0.2s; }
+                    .typing-pulse-dot:nth-child(3) { animation-delay: 0.4s; }
+
+                    @keyframes pulseDot {
+                        0%, 80%, 100% { transform: scale(0.3); opacity: 0.5; }
+                        40% { transform: scale(1.1); opacity: 1; }
+                    }
+                </style>
+
+                <div class="glass-super overflow-hidden shadow-2xl rounded-[2rem] border-0 relative">
+                    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-800"></div>
+                    <div class="p-8">
+                        <div class="flex items-center justify-between mb-8">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
+                                    🏛️
                                 </div>
-                                <h3 class="text-lg font-medium">AI Assistant</h3>
+                                <div>
+                                    <h3 class="text-xl font-extrabold text-gray-900 tracking-tight" style="font-family: 'Outfit', sans-serif;">Super Admin Assistant</h3>
+                                    <div class="flex items-center space-x-2">
+                                        <span class="relative flex h-2 w-2">
+                                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                            <span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                                        </span>
+                                        <span class="text-[10px] font-black text-green-600 uppercase tracking-widest">Live Support</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="flex items-center">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2">
-                                    Online
-                                </span>
-                                <button onclick="clearChat()" class="text-gray-400 hover:text-gray-600">
-                                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </button>
-                            </div>
+                            <button onclick="clearChat()" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all" title="Clear Logic Logs">
+                                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
                         </div>
                         
-                        <div id="chat-container" class="h-80 overflow-y-auto bg-gray-50 rounded-lg p-4 mb-4 border">
-                            <div class="space-y-3" id="chat-messages">
-                                <div class="flex justify-start">
-                                    <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-indigo-500 text-white shadow-sm">
-                                        <p class="text-sm">👋 Hello! I'm your AI assistant. I can help you with:</p>
-                                        <ul class="text-sm mt-2 space-y-1">
-                                            <li>• Managing institutions & admins</li>
-                                            <li>• Analyzing system performance</li>
-                                            <li>• Generating reports</li>
-                                            <li>• Troubleshooting issues</li>
-                                        </ul>
+                        <div id="chat-container" class="h-80 overflow-y-auto scroll-super px-1 mb-6">
+                            <div class="space-y-6" id="chat-messages">
+                                <div class="flex justify-start msg-anim">
+                                    <div class="max-w-[85%] px-5 py-4 bubble-super-bot">
+                                        <p class="text-sm leading-relaxed" style="font-family: 'Inter', sans-serif;">
+                                            Hello, Admin. I'm here to help you manage and oversee all **{{ $stats['total_institutions'] }}** institutions in the system. What would you like to do today?
+                                        </p>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         
-                        <form id="chat-form" class="flex space-x-2">
-                            <input type="text" 
-                                   id="chat-input" 
-                                   class="flex-1 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500" 
-                                   placeholder="Ask about institutions, users, analytics, or reports..."
-                                   required>
-                            <button type="submit" 
-                                    class="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
-                                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                </svg>
-                            </button>
+                        <form id="chat-form" class="relative group mb-6">
+                            <div class="flex items-center bg-white/60 backdrop-blur-md border border-indigo-50 rounded-2xl p-1.5 focus-within:ring-4 focus-within:ring-indigo-100 focus-within:border-indigo-300 transition-all duration-300">
+                                <input type="text" 
+                                       id="chat-input" 
+                                       class="flex-1 bg-transparent border-0 focus:ring-0 text-sm py-3 px-4 text-gray-800 placeholder-indigo-300 font-medium" 
+                                       placeholder="Query the system or institutions..."
+                                       required autocomplete="off">
+                                <button type="submit" 
+                                        class="bg-indigo-600 hover:bg-black text-white p-3 rounded-xl shadow-lg transition-all active:scale-95">
+                                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    </svg>
+                                </button>
+                            </div>
                         </form>
                         
-                        <!-- Quick Action Buttons -->
-                        <div class="mt-4 flex space-x-2">
-                            <button onclick="askQuickQuestion('How many users are active today?')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs transition">
-                                User Stats
-                            </button>
-                            <button onclick="askQuickQuestion('Show me system performance')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs transition">
-                                Performance
-                            </button>
-                            <button onclick="askQuickQuestion('What institutions need attention?')" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded text-xs transition">
-                                Alerts
-                            </button>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="askQuickQuestion('How many users are active today?')" class="px-3 py-1.5 bg-white text-indigo-700 border border-indigo-50 rounded-xl text-[10px] font-bold hover:bg-indigo-600 hover:text-white hover:shadow-lg transition-all shadow-sm">📊 User Stats</button>
+                            <button onclick="askQuickQuestion('Show me system performance')" class="px-3 py-1.5 bg-white text-blue-700 border border-blue-50 rounded-xl text-[10px] font-bold hover:bg-blue-600 hover:text-white hover:shadow-lg transition-all shadow-sm">⚡ Performance</button>
+                            <button onclick="askQuickQuestion('What institutions need attention?')" class="px-3 py-1.5 bg-white text-rose-700 border border-rose-50 rounded-xl text-[10px] font-bold hover:bg-rose-600 hover:text-white hover:shadow-lg transition-all shadow-sm">🚨 Alerts</button>
                         </div>
                     </div>
                 </div>
@@ -417,6 +476,7 @@
             
             const input = document.getElementById('chat-input');
             const messages = document.getElementById('chat-messages');
+            const container = document.getElementById('chat-container');
             const query = input.value.trim();
             
             if (!query) return;
@@ -425,6 +485,19 @@
             addMessage(query, 'user');
             input.value = '';
             
+            // Add typing indicator
+            const typingIndicator = document.createElement('div');
+            typingIndicator.className = 'flex justify-start msg-anim typing-indicator';
+            typingIndicator.innerHTML = `
+                <div class="px-5 py-4 bubble-super-bot flex items-center space-x-1">
+                    <div class="typing-pulse-dot"></div>
+                    <div class="typing-pulse-dot"></div>
+                    <div class="typing-pulse-dot"></div>
+                </div>
+            `;
+            messages.appendChild(typingIndicator);
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
@@ -438,10 +511,21 @@
                     })
                 });
                 
-                const data = await response.json();
-                addMessage(data.response || 'Sorry, I encountered an error.', 'bot');
+                if (messages.contains(typingIndicator)) {
+                    messages.removeChild(typingIndicator);
+                }
+
+                if (response.ok) {
+                    const data = await response.json();
+                    addMessage(data.response || 'Sorry, I encountered an error.', 'bot');
+                } else {
+                    addMessage('Sorry, I encountered an error.', 'bot', true);
+                }
                 
             } catch (error) {
+                if (messages.contains(typingIndicator)) {
+                    messages.removeChild(typingIndicator);
+                }
                 console.error('Chat error:', error);
                 addMessage('Sorry, I\'m currently unavailable. Please try again later.', 'bot', true);
             }
@@ -449,27 +533,27 @@
         
         function addMessage(text, sender, isError = false) {
             const messages = document.getElementById('chat-messages');
+            const container = document.getElementById('chat-container');
             const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} msg-anim`;
             
             if (sender === 'user') {
-                messageDiv.className = 'flex justify-end';
                 messageDiv.innerHTML = `
-                    <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-gray-200 text-gray-800 shadow-sm">
-                        <p class="text-sm">${text}</p>
+                    <div class="max-w-[85%] px-5 py-4 bubble-super-user shadow-md">
+                        <p class="text-sm leading-relaxed" style="font-family: 'Inter', sans-serif;">${text}</p>
                     </div>
                 `;
             } else {
-                messageDiv.className = 'flex justify-start';
-                const bgColor = isError ? 'bg-red-500' : 'bg-indigo-500';
+                const errorClass = isError ? 'border-red-500' : '';
                 messageDiv.innerHTML = `
-                    <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${bgColor} text-white shadow-sm">
-                        <p class="text-sm">${text}</p>
+                    <div class="max-w-[85%] px-5 py-4 bubble-super-bot ${errorClass}">
+                        <p class="text-sm leading-relaxed" style="font-family: 'Inter', sans-serif;">${text}</p>
                     </div>
                 `;
             }
             
             messages.appendChild(messageDiv);
-            document.getElementById('chat-container').scrollTop = document.getElementById('chat-container').scrollHeight;
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
         }
         
         // Quick question functionality
@@ -480,21 +564,34 @@
         }
         
         // Clear chat
-        function clearChat() {
-            const messages = document.getElementById('chat-messages');
-            messages.innerHTML = `
-                <div class="flex justify-start">
-                    <div class="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-indigo-500 text-white shadow-sm">
-                        <p class="text-sm">👋 Hello! I'm your AI assistant. I can help you with:</p>
-                        <ul class="text-sm mt-2 space-y-1">
-                            <li>• Managing institutions & admins</li>
-                            <li>• Analyzing system performance</li>
-                            <li>• Generating reports</li>
-                            <li>• Troubleshooting issues</li>
-                        </ul>
-                    </div>
-                </div>
-            `;
+        async function clearChat() {
+            if (!confirm('Are you sure you want to clear your chat history permanently?')) return;
+            
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const messages = document.getElementById('chat-messages');
+                    messages.innerHTML = `
+                        <div class="flex justify-start msg-anim">
+                            <div class="max-w-[85%] px-5 py-4 bubble-super-bot">
+                                <p class="text-sm">Conversation logs purged. Engine reset accomplished.</p>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    alert('Failed to clear chat history. Please try again.');
+                }
+            } catch (error) {
+                console.error('Clear chat error:', error);
+                alert('Connection error. Please check your internet connection.');
+            }
         }
         
         // Analytics refresh

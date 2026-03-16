@@ -5,9 +5,18 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use App\Notifications\TimetablePublished;
+use Illuminate\Support\Facades\Notification;
 
 class Timetable extends Model
 {
+    protected static function booted(): void
+    {
+        static::deleting(function (Timetable $timetable) {
+            $timetable->releaseSlots();
+        });
+    }
+
     protected $fillable = [
         'name',
         'department_id',
@@ -107,10 +116,57 @@ class Timetable extends Model
             'published_at' => now(),
             'published_by' => $user?->id
         ]);
+
+        // When published, mark lecturers as busy for these specific slots
+        foreach ($this->entries as $entry) {
+            if ($entry->lecturer_id) {
+                \App\Models\LecturerAvailability::updateOrCreate(
+                    [
+                        'lecturer_id' => $entry->lecturer_id,
+                        'day' => $entry->day_of_week,
+                        'slot' => $entry->slot,
+                    ],
+                    ['status' => 'auto_busy']
+                );
+            }
+        }
+
+        // Notify all students and lecturers in this institution
+        $usersToNotify = User::where('institution_id', $this->institution_id)
+            ->whereIn('role', ['student', 'lecturer'])
+            ->get();
+
+        Notification::send($usersToNotify, new TimetablePublished($this));
+    }
+
+    public function unpublish(): void
+    {
+        if ($this->status === 'published') {
+            $this->releaseSlots();
+            $this->update(['status' => 'approved']);
+        }
+    }
+
+    public function releaseSlots(): void
+    {
+        foreach ($this->entries as $entry) {
+            if ($entry->lecturer_id) {
+                \App\Models\LecturerAvailability::where('lecturer_id', $entry->lecturer_id)
+                    ->where('day', $entry->day_of_week)
+                    ->where('slot', $entry->slot)
+                    ->where('status', 'auto_busy')
+                    ->update(['status' => 'available']);
+            }
+        }
     }
 
     public function approve(User $user = null): void
     {
+        // If it was published, we unpublish first to release slots
+        if ($this->status === 'published') {
+            $this->releaseSlots();
+        }
+
         $this->update([
             'status' => 'approved',
             'approved_at' => now(),
@@ -120,6 +176,10 @@ class Timetable extends Model
 
     public function requestApproval(): void
     {
+        if ($this->status === 'published') {
+            $this->releaseSlots();
+        }
+
         $this->update([
             'status' => 'pending_approval'
         ]);

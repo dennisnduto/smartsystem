@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="test-token">
+    <title>Lecturer Dashboard Debug</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Availability styles */
+        .legend { width: 10px; height: 10px; border-radius: 9999px; display: inline-block; }
+        .legend-free { background: #ecfdf5; border: 1px solid #10b98155; }
+        .legend-busy { background: #fef2f2; border: 1px solid #ef444455; }
+        .legend-auto { background: #e5e7eb; border: 1px solid #9ca3af55; }
+
+        .avail-cell { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); cursor: pointer; transition: background .15s, border-color .15s, box-shadow .15s; user-select: none; }
+        .avail-cell.is-free { background: #ecfdf5; border-color: #10b98155; color: #065f46; }
+        .avail-cell.is-busy { background: #fef2f2; border-color: #ef444455; color: #7f1d1d; }
+        .avail-cell.is-auto-busy { background: #e5e7eb; border-color: #9ca3af55; color: #374151; cursor: not-allowed; opacity: 0.8; }
+        .avail-cell:hover { box-shadow: 0 1px 0 rgba(0,0,0,0.04); }
+        .avail-label { font-size: 11px; font-weight: 700; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-7xl mx-auto p-6 space-y-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold">Lecturer Dashboard (Debug)</h1>
+                <p class="text-sm text-gray-600">Welcome back, Lecturer</p>
+            </div>
+        </div>
+
+        <!-- Debug Info -->
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <h2 class="font-semibold text-yellow-800 mb-2">Debug Information</h2>
+            <div class="text-sm text-yellow-700">
+                <p>User ID: 3</p>
+                <p>Lecturer ID: 1</p>
+                <p>Entries: 2</p>
+                <p>Availability entries: 2</p>
+                <p>Current time: 2026-03-02 12:56:40</p>
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white rounded-xl shadow p-4">
+                <div class="text-2xl">📚</div>
+                <div class="text-sm text-gray-500">This Week Classes</div>
+                <div class="text-xl font-bold">2</div>
+            </div>
+            <div class="bg-white rounded-xl shadow p-4">
+                <div class="text-2xl">🏫</div>
+                <div class="text-sm text-gray-500">Rooms Used</div>
+                <div class="text-xl font-bold">1</div>
+            </div>
+            <div class="bg-white rounded-xl shadow p-4">
+                <div class="text-2xl">🧪</div>
+                <div class="text-sm text-gray-500">Lab Sessions</div>
+                <div class="text-xl font-bold">0</div>
+            </div>
+            <div class="bg-white rounded-xl shadow p-4">
+                <div class="text-2xl">🎯</div>
+                <div class="text-sm text-gray-500">Upcoming Next</div>
+                <div class="text-sm">
+                    <div class="font-semibold">SIT 404</div>
+                    <div class="text-xs text-gray-600">Client Server Systems</div>
+                    <div class="text-xs text-green-600">TB1_GF1</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Today List -->
+        <div class="bg-white rounded-xl shadow p-4">
+            <h2 class="font-semibold mb-3">Today</h2>
+            <div class="p-3 border rounded mb-2">
+                <div class="text-sm text-gray-500">Slot 1 (7-10)</div>
+                <div class="font-semibold">SIT 404 — Client Server Systems</div>
+                <div class="text-sm text-gray-600">Room: TB1_GF1</div>
+            </div>
+        </div>
+
+        <!-- JavaScript Test -->
+        <div class="bg-white rounded-xl shadow p-4">
+            <h2 class="font-semibold mb-3">JavaScript Test</h2>
+            <div id="debug-output" class="mb-3 p-3 bg-gray-100 rounded text-sm"></div>
+            <button onclick="testJS()" class="px-4 py-2 bg-blue-600 text-white rounded">Test JavaScript</button>
+        </div>
+    </div>
+
+    <script>
+        console.log("Debug dashboard loaded");
+        
+        function testJS() {
+            const output = document.getElementById("debug-output");
+            const tests = [];
+            
+            // Test 1: Basic JavaScript
+            tests.push("✅ JavaScript working");
+            
+            // Test 2: DOM manipulation
+            try {
+                document.body.style.backgroundColor = "#f0f9ff";
+                tests.push("✅ DOM manipulation working");
+            } catch(e) {
+                tests.push("❌ DOM manipulation failed: " + e.message);
+            }
+            
+            // Test 3: Time functions
+            try {
+                const now = new Date();
+                tests.push("✅ Time functions working: " + now.toLocaleTimeString());
+            } catch(e) {
+                tests.push("❌ Time functions failed: " + e.message);
+            }
+            
+            // Test 4: Event listeners
+            try {
+                document.addEventListener("click", function() {
+                    console.log("Click event working");
+                });
+                tests.push("✅ Event listeners working");
+            } catch(e) {
+                tests.push("❌ Event listeners failed: " + e.message);
+            }
+            
+            output.innerHTML = tests.join("<br>");
+        }
+        
+        // Auto-run test
+        setTimeout(testJS, 1000);
+    </script>
+</body>
+</html>

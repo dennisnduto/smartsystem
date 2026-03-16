@@ -1,312 +1,220 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ $timetable->name }} - Timetable</title>
+    <meta charset="utf-8">
+    <title>{{ $title ?? 'Timetable' }}</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        @page {
+            margin: 0.3cm;
+            size: A4 landscape;
+        }
+        body { 
+            font-family: 'Helvetica', 'Arial', sans-serif; 
             margin: 0;
-            padding: 20px;
-            color: #333;
+            color: #1e293b;
+            line-height: 1.2;
         }
         .header {
-            text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #2563eb;
-            padding-bottom: 20px;
+            margin-bottom: 5px;
+            border-bottom: 2px solid #4f46e5;
+            padding-bottom: 5px;
         }
-        .header h1 {
-            color: #2563eb;
-            margin: 0;
+        .header table {
+            width: 100%;
+            border: none;
+        }
+        .header td {
+            border: none;
+            vertical-align: middle;
+        }
+        .logo-txt {
             font-size: 24px;
+            font-weight: bold;
+            color: #4f46e5;
+            letter-spacing: -1px;
         }
-        .header p {
-            margin: 5px 0 0 0;
-            color: #666;
+        .report-title {
+            text-align: right;
+            font-size: 18px;
+            font-weight: bold;
+            color: #64748b;
+            text-transform: uppercase;
         }
-        .timetable {
+
+        h2 { 
+            color: #1e293b; 
+            font-size: 16px;
+            margin-top: 25px;
+            margin-bottom: 10px;
+            padding-left: 8px;
+            border-left: 4px solid #4f46e5;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 20px;
+            table-layout: fixed;
+        }
+        th, td { 
+            border: 1px solid #e2e8f0; 
+            padding: 10px; 
+            text-align: left; 
+            font-size: 11px;
+            word-wrap: break-word;
+        }
+        th { 
+            background-color: #4f46e5; 
+            color: white;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        tr:nth-child(even) {
+            background-color: #f1f5f9;
+        }
+        .unit-code { font-weight: bold; color: #4f46e5; }
+        .room-tag { 
+            background-color: #ecfdf5; 
+            color: #059669; 
+            padding: 2px 6px; 
+            border-radius: 4px; 
+            font-weight: bold;
+            border: 1px solid #d1fae5;
+        }
+        .footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 10px;
+            color: #94a3b8;
+            padding-top: 10px;
+            border-top: 1px solid #e2e8f0;
+        }
+        .no-classes { 
+            text-align: center;
+            padding: 40px;
+            background: #f8fafc;
+            border-radius: 12px;
+            color: #64748b;
+            font-style: italic;
+            border: 2px dashed #e2e8f0;
+        }
+        .program-sub-header {
+            background-color: #f1f5f9;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #475569;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #4f46e5;
+            margin-top: 15px;
+            margin-bottom: 0;
+            text-transform: uppercase;
+        }
+        .master-grid {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 30px;
+            table-layout: fixed;
+            margin-top: 10px;
         }
-        .timetable th,
-        .timetable td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        .timetable th {
-            background-color: #f8fafc;
-            font-weight: bold;
-            color: #374151;
-        }
-        .time-column {
-            background-color: #f1f5f9;
-            font-weight: bold;
-            width: 120px;
-        }
-        .entry {
-            background-color: #f0f9ff;
-            border: 1px solid #0ea5e9;
-            border-radius: 4px;
-            padding: 4px;
-            margin: 2px 0;
-            font-size: 12px;
-        }
-        .unit-code {
-            font-weight: bold;
-            color: #1e40af;
-        }
-        .course-name {
-            font-size: 10px;
-            color: #64748b;
-        }
-        .lecturer {
-            font-size: 10px;
-            color: #374151;
-        }
-        .room {
-            background-color: #ecfdf5;
-            color: #065f46;
-            padding: 2px 4px;
-            border-radius: 2px;
-            font-size: 10px;
-            font-weight: bold;
-        }
-        .summary {
-            margin-top: 30px;
-            padding: 20px;
-            background-color: #f8fafc;
-            border-radius: 8px;
-        }
-        .summary h3 {
-            color: #1e40af;
-            margin-top: 0;
-        }
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-top: 15px;
-        }
-        .summary-item {
-            background-color: white;
-            padding: 15px;
-            border-radius: 6px;
-            text-align: center;
-        }
-        .summary-item h4 {
-            margin: 0 0 10px 0;
-            color: #374151;
-            font-size: 14px;
-        }
-        .summary-item .number {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2563eb;
-        }
-        .course-section {
-            margin-bottom: 40px;
-            page-break-inside: avoid;
-        }
-        .course-header {
-            background-color: #6366f1;
-            color: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .course-header h2 {
-            margin: 0;
-            font-size: 20px;
-        }
-        .course-header p {
-            margin: 5px 0 0 0;
-            opacity: 0.9;
-        }
-        @media print {
-            body { margin: 0; padding: 10px; }
-            .course-section { page-break-inside: avoid; }
+        .master-grid th, .master-grid td {
+            border: 1px solid #e2e8f0;
+            padding: 1px !important;
+            font-size: 7px;
+            overflow: hidden;
         }
     </style>
 </head>
 <body>
     <div class="header">
-        <h1>{{ $timetable->institution->name ?? 'University Timetable' }}</h1>
-        <p>{{ $timetable->name }}</p>
-        @if(isset($courseName) && $courseName)
-            <p><strong>Course:</strong> {{ $courseName }}</p>
-        @endif
-        <p>{{ $timetable->academic_year ?? '—' }} • {{ $timetable->semester ?? 'N/A' }}</p>
+        <table>
+            <tr>
+                <td><div class="logo-txt">{{ strtoupper($user->institution->name ?? 'SMART SYSTEM') }}</div></td>
+                <td><div class="report-title">{{ $title ?? 'Institution Wide Timetable' }}</div></td>
+            </tr>
+        </table>
     </div>
 
-    @if($timetable->entries->isEmpty())
-        <div style="text-align: center; padding: 40px; color: #666;">
-            <h2>No Schedule Available</h2>
-            <p>No entries have been generated for this timetable yet.</p>
-        </div>
-    @else
-        @php
-            // Group entries by course for better organization
-            $entriesByCourse = $timetable->entries->groupBy('course_id');
-            $courses = $entriesByCourse->map(function($entries, $courseId) {
-                $firstEntry = $entries->first();
-                return [
-                    'id' => $courseId,
-                    'name' => $firstEntry->course->name ?? 'Unknown Course',
-                    'entries' => $entries
-                ];
-            })->sortBy('name');
-        @endphp
-
-        @if(isset($courseName) && $courseName)
-            {{-- Single course export --}}
-            @php $course = $courses->first(); @endphp
-            @if($course)
-                <div class="course-section">
-                    <div class="course-header">
-                        <h2>{{ $course['name'] }}</h2>
-                        <p>{{ $course['entries']->count() }} units scheduled</p>
-                    </div>
-
-                    <table class="timetable">
-                        <thead>
-                            <tr>
-                                <th class="time-column">Time</th>
-                                <th>Monday</th>
-                                <th>Tuesday</th>
-                                <th>Wednesday</th>
-                                <th>Thursday</th>
-                                <th>Friday</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @php
-                                $timeSlots = [
-                                    1 => '7:00 AM - 10:00 AM',
-                                    2 => '10:00 AM - 1:00 PM',
-                                    3 => '1:00 PM - 4:00 PM',
-                                    4 => '4:00 PM - 7:00 PM'
-                                ];
-                                $dayNames = [1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday'];
-                            @endphp
-                            
-                            @foreach($timeSlots as $slotNum => $timeLabel)
+    @if(isset($isInstitutional) && $isInstitutional && isset($programChunks))
+        @foreach($programChunks as $chunkIndex => $chunkData)
+            @php 
+                $currentPrograms = $chunkData['programs'] ?? $chunkData;
+                $currentCourse = $chunkData['course'] ?? 'General';
+            @endphp
+            <div class="page-container" style="page-break-after: always; padding-bottom: 5px;">
+                <table style="width: 100%; margin-bottom: 2px; border: none; border-bottom: 2px solid #4f46e5;">
+                    <tr style="background: none;">
+                        <td style="border: none; padding: 0; font-size: 10px; font-weight: bold; color: #4f46e5;">
+                            {{ strtoupper($user->institution->name ?? 'SMART SYSTEM') }}
+                        </td>
+                        <td style="border: none; padding: 0; text-align: right; font-size: 7px; color: #64748b; font-weight: bold; text-transform: uppercase;">
+                            {{ strtoupper($currentCourse) }} • Group {{ $chunkIndex + 1 }}
+                        </td>
+                    </tr>
+                </table>
+                
+                <table class="master-grid" style="table-layout: fixed; width: 100%; border: 1.5px solid #334155;">
+                    <thead>
+                        <tr>
+                            <th style="width: 15px; background-color: #f1f5f9; color: #475569; font-size: 6px; border-bottom: 2px solid #334155;">DAY</th>
+                            <th style="width: 30px; background-color: #f1f5f9; color: #475569; font-size: 6px; border-bottom: 2px solid #334155;">TIME</th>
+                            @foreach($currentPrograms as $key => $program)
+                                <th style="background-color: #4f46e5; border-right: 1px solid #6366f1; border-bottom: 2px solid #1e1b4b; padding: 1px;">
+                                    <div style="font-weight: 800; white-space: nowrap; overflow: hidden; font-size: 6px;">{{ $program['course'] }}</div>
+                                    <div style="color: #c7d2fe; font-size: 5px; margin-top: 0px;">
+                                        ({{ str_ireplace('Year ', 'Y', $program['year']) }})
+                                    </div>
+                                </th>
+                            @endforeach
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($days as $dayNum => $dayName)
+                            @if(!$loop->first)
+                                <tr style="height: 1px; background-color: #334155;"><td colspan="{{ 2 + count($currentPrograms) }}" style="border: none; padding: 0 !important; height: 1px;"></td></tr>
+                            @endif
+                            @foreach($slots as $slotNum => $slotTime)
                                 <tr>
-                                    <td class="time-column">{{ $timeLabel }}</td>
-                                    @foreach($dayNames as $dayNum => $dayName)
-                                        @php
-                                            $courseEntries = $course['entries']->filter(function ($entry) use ($dayNum, $slotNum) {
-                                                return (int)$entry->day_of_week === (int)$dayNum && (int)$entry->slot === (int)$slotNum;
-                                            });
-                                        @endphp
-                                        <td>
-                                            @foreach($courseEntries as $entry)
-                                                <div class="entry">
-                                                    <div class="unit-code">{{ $entry->unit->code ?? 'N/A' }}</div>
-                                                    @if($entry->course)
-                                                        <div class="course-name">{{ $entry->course->name }}</div>
-                                                    @endif
-                                                    <div class="lecturer">{{ $entry->lecturer->name ?? 'N/A' }}</div>
-                                                    @if($entry->room)
-                                                        <span class="room">{{ $entry->room->name }}</span>
-                                                    @endif
+                                    @if($loop->first)
+                                        <td rowspan="{{ count($slots) }}" style="background-color: #f8fafc; font-weight: 900; text-align: center; font-size: 6px; width: 15px; border-right: 1.5px solid #334155; border-bottom: 1px solid #cbd5e1;">
+                                            <div style="white-space: nowrap; color: #1e293b; font-size: 6px; letter-spacing: 0.5px;">{{ substr(strtoupper($dayName), 0, 3) }}</div>
+                                        </td>
+                                    @endif
+                                    <td style="background-color: #fff; font-size: 5px; font-weight: bold; text-align: center; border-right: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1; padding: 0.5px; color: #475569;">
+                                        {{ $slotTime }}
+                                    </td>
+                                    @foreach($currentPrograms as $programKey => $program)
+                                        @php $entry = $matrix[$dayNum][$slotNum][$programKey] ?? null; @endphp
+                                        <td style="text-align: center; vertical-align: middle; height: 12px; padding: 0px; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+                                            @if($entry)
+                                                <div style="font-weight: 900; color: #0f172a; font-size: 5.5px; margin-bottom: 0px; line-height: 0.9;">
+                                                    {{ $entry->unit->code ?? '—' }}
                                                 </div>
-                                            @endforeach
+                                                <div style="color: #64748b; font-size: 4.5px; margin-bottom: 0px; line-height: 0.9; font-weight: 500;">
+                                                    {{ $entry->lecturer->name ?? '—' }}
+                                                </div>
+                                                <div style="background-color: #f0fdf4; color: #166534; font-weight: 800; font-size: 4px; padding: 0.5px; border-radius: 1px; border: 0.5px solid #dcfce7; display: inline-block; line-height: 0.9; margin-top: 0.5px;">
+                                                    {{ $entry->room->name ?? 'TBA' }}
+                                                </div>
+                                            @else
+                                                <div style="color: #f8fafc; font-size: 2px;">.</div>
+                                            @endif
                                         </td>
                                     @endforeach
                                 </tr>
                             @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            @endif
-        @else
-            {{-- All courses export --}}
-            @foreach($courses as $course)
-            <div class="course-section">
-                <div class="course-header">
-                    <h2>{{ $course['name'] }}</h2>
-                    <p>{{ $course['entries']->count() }} units scheduled</p>
-                </div>
-
-                <table class="timetable">
-                    <thead>
-                        <tr>
-                            <th class="time-column">Time</th>
-                            <th>Monday</th>
-                            <th>Tuesday</th>
-                            <th>Wednesday</th>
-                            <th>Thursday</th>
-                            <th>Friday</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @php
-                            $timeSlots = [
-                                1 => '7:00 AM - 10:00 AM',
-                                2 => '10:00 AM - 1:00 PM',
-                                3 => '1:00 PM - 4:00 PM',
-                                4 => '4:00 PM - 7:00 PM'
-                            ];
-                            $dayNames = [1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday', 5 => 'Friday'];
-                        @endphp
-                        
-                        @foreach($timeSlots as $slotNum => $timeLabel)
-                            <tr>
-                                <td class="time-column">{{ $timeLabel }}</td>
-                                @foreach($dayNames as $dayNum => $dayName)
-                                    @php
-                                        $courseEntries = $course['entries']->filter(function ($entry) use ($dayNum, $slotNum) {
-                                            return (int)$entry->day_of_week === (int)$dayNum && (int)$entry->slot === (int)$slotNum;
-                                        });
-                                    @endphp
-                                    <td>
-                                        @foreach($courseEntries as $entry)
-                                            <div class="entry">
-                                                <div class="unit-code">{{ $entry->unit->code ?? 'N/A' }}</div>
-                                                @if($entry->course)
-                                                    <div class="course-name">{{ $entry->course->name }}</div>
-                                                @endif
-                                                <div class="lecturer">{{ $entry->lecturer->name ?? 'N/A' }}</div>
-                                                @if($entry->room)
-                                                    <span class="room">{{ $entry->room->name }}</span>
-                                                @endif
-                                            </div>
-                                        @endforeach
-                                    </td>
-                                @endforeach
-                            </tr>
                         @endforeach
                     </tbody>
                 </table>
             </div>
         @endforeach
-        @endif
-
-        <div class="summary">
-            <h3>Summary</h3>
-            <div class="summary-grid">
-                <div class="summary-item">
-                    <h4>Total Units</h4>
-                    <div class="number">{{ $timetable->entries->pluck('unit')->unique('id')->count() }}</div>
-                </div>
-                <div class="summary-item">
-                    <h4>Courses</h4>
-                    <div class="number">{{ $courses->count() }}</div>
-                </div>
-                <div class="summary-item">
-                    <h4>Lecturers</h4>
-                    <div class="number">{{ $timetable->entries->pluck('lecturer')->unique('id')->count() }}</div>
-                </div>
-                <div class="summary-item">
-                    <h4>Rooms</h4>
-                    <div class="number">{{ $timetable->entries->pluck('room')->unique('id')->count() }}</div>
-                </div>
-            </div>
-        </div>
+    @else
+        <div class="no-classes">No sessions scheduled for this timetable.</div>
     @endif
+
+    <div class="footer">
+        © {{ date('Y') }} SMART University Timetabling System • Institutional Timetable Report • Confidential
+    </div>
 </body>
 </html>

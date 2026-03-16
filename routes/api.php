@@ -6,6 +6,7 @@ use App\Http\Controllers\TimetableController;
 use App\Models\Course;
 
 Route::post('/chat', [ChatController::class, 'handle']);
+Route::delete('/chat', [ChatController::class, 'clear']);
 Route::match(['get', 'post'], '/timetable/generate', [TimetableController::class, 'generate']);
 
 // Get courses by institution (for student registration)

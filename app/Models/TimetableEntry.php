@@ -12,33 +12,17 @@ class TimetableEntry extends Model
 
     protected static function booted(): void
     {
-        static::created(function (TimetableEntry $entry): void {
-            if ($entry->lecturer_id && $entry->day_of_week && $entry->slot) {
-                LecturerAvailability::updateOrCreate(
-                    [
-                        'lecturer_id' => $entry->lecturer_id,
-                        'day' => (int) $entry->day_of_week,
-                        'slot' => (int) $entry->slot,
-                    ],
-                    [
-                        'status' => 'auto_busy',
-                    ]
-                );
-            }
-        });
+        // We do NOT mark busy on creation anymore. 
+        // Marking is now deferred until Timetable::publish()
 
         static::deleted(function (TimetableEntry $entry): void {
             if ($entry->lecturer_id && $entry->day_of_week && $entry->slot) {
-                $record = LecturerAvailability::where('lecturer_id', $entry->lecturer_id)
+                // If we delete an entry, we should free up the lecturer ONLY if it was auto-locked
+                \App\Models\LecturerAvailability::where('lecturer_id', $entry->lecturer_id)
                     ->where('day', (int) $entry->day_of_week)
                     ->where('slot', (int) $entry->slot)
-                    ->first();
-
-                if ($record && $record->status === 'auto_busy') {
-                    // Revert back to available when an auto-busy slot is freed
-                    $record->status = 'available';
-                    $record->save();
-                }
+                    ->where('status', 'auto_busy')
+                    ->update(['status' => 'available']);
             }
         });
     }
@@ -65,8 +49,7 @@ class TimetableEntry extends Model
 
     public function lecturer(): BelongsTo
     {
-        // Get the User who is a lecturer (using lecturer_id)
-        return $this->belongsTo(User::class, 'lecturer_id', 'lecturer_id');
+        return $this->belongsTo(User::class, 'lecturer_id');
     }
 
     public function teachingGroup(): BelongsTo
