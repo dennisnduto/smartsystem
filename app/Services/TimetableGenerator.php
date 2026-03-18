@@ -91,7 +91,8 @@ class TimetableGenerator
             return $timetable; // nothing to schedule
         }
 
-        // Clear existing entries for this timetable to avoid duplicates
+        // Clear existing entries for this timetable to avoid duplicates (release slots first to avoid orphaned auto_busy)
+        $timetable->releaseSlots();
         TimetableEntry::where('timetable_id', $timetable->id)->delete();
 
         $scheduledEntries = $this->generateSmartTimetable($timetable, $assignments, $timetable->institution_id);
@@ -313,10 +314,10 @@ class TimetableGenerator
     {
         $lecturerId = $assignment->lecturer_id;
 
-        // Restrict to slots where lecturer is available (Default is available unless explicitly busy/unavailable)
+        // Restrict to slots where lecturer is available (Default is busy unless explicitly available)
         $filteredSlots = [];
         foreach ($slots as $slot) {
-            $status = $availabilityMatrix[$lecturerId][$day][$slot] ?? 'available';
+            $status = $availabilityMatrix[$lecturerId][$day][$slot] ?? 'busy';
             
             if ($status === 'available' || $status === 'auto_busy') {
                 $filteredSlots[] = $slot;
@@ -357,8 +358,8 @@ class TimetableGenerator
             return false;
         }
 
-        // Check availability records - assume available if NO record, OR if status is 'available' or 'auto_busy'
-        $status = $availabilityMatrix[$lecturerId][$day][$slot] ?? 'available';
+        // Check availability records - assume busy if NO record, OR if status is 'available' or 'auto_busy'
+        $status = $availabilityMatrix[$lecturerId][$day][$slot] ?? 'busy';
 
         return $status === 'available' || $status === 'auto_busy';
     }

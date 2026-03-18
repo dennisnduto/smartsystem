@@ -205,7 +205,7 @@ class TimetableController extends Controller
         ]);
 
         // Ensure all lecturers for this institution who HAVE assignments have submitted availability
-        $lecturerIds = \Illuminate\Support\Facades\DB::table('users')
+        $lecturerUserIds = \Illuminate\Support\Facades\DB::table('users')
             ->where('institution_id', $institutionId)
             ->where('role', 'lecturer')
             ->whereNotNull('lecturer_id')
@@ -214,20 +214,20 @@ class TimetableController extends Controller
                     ->from('course_unit_year_user')
                     ->whereColumn('course_unit_year_user.user_id', 'users.id');
             })
-            ->pluck('lecturer_id')
+            ->pluck('id')
             ->unique()
             ->values();
 
-        if ($lecturerIds->isNotEmpty()) {
-            $withAvailability = \App\Models\LecturerAvailability::whereIn('lecturer_id', $lecturerIds)
+        if ($lecturerUserIds->isNotEmpty()) {
+            $withAvailability = \App\Models\LecturerAvailability::whereIn('lecturer_id', $lecturerUserIds)
                 ->select('lecturer_id')
                 ->distinct()
                 ->pluck('lecturer_id');
 
-            $missing = $lecturerIds->diff($withAvailability);
+            $missing = $lecturerUserIds->diff($withAvailability);
 
             if ($missing->isNotEmpty()) {
-                $names = \App\Models\Lecturer::whereIn('id', $missing)->pluck('name')->implode(', ');
+                $names = \App\Models\User::whereIn('id', $missing)->pluck('name')->implode(', ');
                 return redirect()->back()->with('error', 'Cannot generate timetable. The following lecturers have not filled their availability: ' . $names);
             }
         }

@@ -183,7 +183,8 @@ class AITimetableGenerator
             throw new \RuntimeException('OpenAI response not in expected schema');
         }
 
-        // Clear existing entries, then create new ones
+        // Clear existing entries, then create new ones (release slots first to avoid orphaned auto_busy)
+        $timetable->releaseSlots();
         TimetableEntry::where('timetable_id', $timetable->id)->delete();
 
         foreach ($decoded['entries'] as $e) {
