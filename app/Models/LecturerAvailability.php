@@ -20,7 +20,7 @@ class LecturerAvailability extends Model
 
     public function lecturer(): BelongsTo
     {
-        return $this->belongsTo(Lecturer::class);
+        return $this->belongsTo(User::class, 'lecturer_id');
     }
 }
 

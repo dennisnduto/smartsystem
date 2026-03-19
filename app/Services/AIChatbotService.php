@@ -116,8 +116,8 @@ class AIChatbotService
     private function getLecturerTimetableData($user): array
     {
         $lecturerId = $user->lecturer_id;
-        if (!$lecturerId && $user->lecturerProfile) {
-            $lecturerId = $user->lecturerProfile->id;
+        if (!$lecturerId && $user->lecturer) {
+            $lecturerId = $user->lecturer->id;
         }
 
         $entries = TimetableEntry::with(['unit', 'course', 'room', 'timetable'])

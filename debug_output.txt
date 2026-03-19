@@ -1,8 +1,0 @@
---- COURSE -> CUY CHECK ---
-ID: 11 | Name: [BSC Information Technology] | CUY Records: 23 | Timetable Entries: 21
-ID: 12 | Name: [Bsc Business Information Technology] | CUY Records: 28 | Timetable Entries: 27
-ID: 13 | Name: [BSC Software Engineering] | CUY Records: 23 | Timetable Entries: 21
-ID: 14 | Name: [BSC Computer Science] | CUY Records: 24 | Timetable Entries: 22
-ID: 15 | Name: [BSC Computer Technology] | CUY Records: 14 | Timetable Entries: 14
-
---- TIMETABLE ENTRY -> CUY MISSES ---

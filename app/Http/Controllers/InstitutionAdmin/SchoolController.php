@@ -37,16 +37,14 @@ class SchoolController extends Controller
 
     public function edit(School $school)
     {
-        $institution = Auth::user()->institution;
-        abort_if($school->institution_id !== $institution->id, 403);
+        $this->authorize('view', $school);
 
         return view('institution-admin.schools.edit', compact('school'));
     }
 
     public function update(Request $request, School $school)
     {
-        $institution = Auth::user()->institution;
-        abort_if($school->institution_id !== $institution->id, 403);
+        $this->authorize('update', $school);
         $request->validate([
             'name' => 'required|string|max:255|unique:schools,name,' . $school->id . ',id,institution_id,' . $school->institution_id,
             'code' => 'nullable|string|max:20|unique:schools,code,' . $school->id . ',id,institution_id,' . $school->institution_id,
@@ -58,8 +56,7 @@ class SchoolController extends Controller
 
     public function destroy(School $school)
     {
-        $institution = Auth::user()->institution;
-        abort_if($school->institution_id !== $institution->id, 403);
+        $this->authorize('delete', $school);
         $school->delete();
         return redirect()->route('institution-admin.schools.index')->with('success', 'School deleted successfully.');
     }

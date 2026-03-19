@@ -46,6 +46,7 @@ class CourseUnitYearController extends Controller
 
     public function create()
     {
+        $this->authorize('create', CourseUnitYear::class);
         $institution = Auth::user()->institution;
         if ($institution->departments()->withCount('courses')->get()->sum('courses_count') === 0) {
             return redirect()->route('institution-admin.courses.create')
@@ -63,6 +64,7 @@ class CourseUnitYearController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorize('create', CourseUnitYear::class);
         $institution = Auth::user()->institution;
 
         $request->validate([

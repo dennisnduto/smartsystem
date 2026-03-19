@@ -54,157 +54,49 @@ class LecturerController extends Controller
 
     public function create()
     {
-        $institution = auth()->user()->institution;
-        $departments = $institution->departments()->get();
-        $courses = $institution->departments()->with('courses')->get()->pluck('courses')->flatten();
-        $coursesForJs = $courses->map(function($course){
-            return [
-                'id' => $course->id,
-                'name' => $course->name,
-                'department' => optional($course->department)->name,
-                'lab_required' => (bool)($course->lab_required ?? false),
-            ];
-        })->values();
-        
-        // Year-aware unit options per course from mappings
-$courseUnitYears = CourseUnitYear::with(['course.department','unit'])
-            ->whereHas('course.department', function($q) use ($institution) {
-                $q->where('institution_id', $institution->id);
-            })->get();
-        $cuyForJs = $courseUnitYears->filter(function($m) {
-            return $m->unit !== null; // Only include mappings with valid units
-        })->map(function($m) {
-            return [
-                'course_id' => $m->course_id,
-                'unit_id' => $m->unit_id,
-                'unit_code' => $m->unit->code ?? '',
-                'unit_name' => $m->unit->name ?? '',
-                'academic_year' => $m->academic_year,
-                'semester' => $m->semester,
-            ];
-        })->values();
-
-        // Fallback: all units list (for when mappings are missing) - scoped to institution
-        $unitsForJs = Unit::where('institution_id', $institution->id)
-            ->orderBy('code')
-            ->get(['id','code','name','year_level'])
-            ->map(function($u){
-            return [
-                'id' => $u->id,
-                'code' => $u->code,
-                'name' => $u->name,
-                'year_level' => $u->year_level,
-            ];
-        });
-        
-        return view('institution-admin.lecturers.create', compact('departments', 'courses', 'coursesForJs', 'cuyForJs', 'unitsForJs'));
+        return view('institution-admin.lecturers.create', $this->getLecturerFormData());
     }
 
     public function store(Request $request)
     {
         $institution = auth()->user()->institution;
         
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-'employee_id' => 'nullable|string|max:50|unique:users,employee_id',
-            'department_id' => 'required|exists:departments,id',
-            'phone' => 'nullable|string|max:20',
-            'password' => 'required|string|min:8',
-'course_assignments' => 'array',
-            'course_assignments.*.course_id' => 'required|exists:courses,id',
-            'course_assignments.*.unit_id' => 'required|exists:units,id',
-'course_assignments.*.academic_year' => 'required|in:Y1,Y2,Y3,Y4,Y5',
-            'course_assignments.*.semester' => 'nullable|in:S1,S2',
-            'course_assignments.*.is_lab_only' => 'boolean',
-            'course_assignments.*.notes' => 'nullable|string|max:500'
-        ]);
+        $this->validateLecturer($request);
 
         // Verify department belongs to institution
         $department = Department::where('id', $request->department_id)
             ->where('institution_id', $institution->id)
             ->firstOrFail();
 
-        // Create a matching Lecturer profile for FK consistency
-$lecturerProfile = LecturerProfile::create([
-            'name' => $request->name,
-            'email' => $request->email,
-        ]);
+        try {
+            return DB::transaction(function() use ($request, $institution) {
+                // Create a matching Lecturer profile for FK consistency
+                $lecturerProfile = LecturerProfile::create([
+                    'name' => $request->name,
+                    'email' => $request->email,
+                ]);
 
-        $lecturer = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => 'lecturer',
-            'employee_id' => $request->employee_id,
-            'lecturer_id' => $lecturerProfile->id,
-            'institution_id' => $institution->id,
-            'department_id' => $request->department_id,
-            'phone' => $request->phone,
-            'email_verified_at' => now(),
-        ]);
+                $lecturer = User::create([
+                    'name' => $request->name,
+                    'email' => $request->email,
+                    'password' => Hash::make($request->password),
+                    'role' => 'lecturer',
+                    'employee_id' => $request->employee_id,
+                    'lecturer_id' => $lecturerProfile->id,
+                    'institution_id' => $institution->id,
+                    'department_id' => $request->department_id,
+                    'phone' => $request->phone,
+                    'email_verified_at' => now(),
+                ]);
 
-        // Attach unit-year assignments if provided
-        if ($request->course_assignments) {
-            $cuyData = [];
-            foreach ($request->course_assignments as $assignment) {
-                // Verify course belongs to institution and mapping exists for unit/year
-                $course = Course::where('id', $assignment['course_id'])
-                    ->whereHas('department', function($query) use ($institution) {
-                        $query->where('institution_id', $institution->id);
-                    })
-                    ->first();
-                if (!$course) { continue; }
+                $this->syncCourseAssignments($lecturer, $request->course_assignments, $institution);
 
-                $cuy = CourseUnitYear::where('course_id', $assignment['course_id'])
-                    ->where('unit_id', $assignment['unit_id'])
-                    ->where('academic_year', $assignment['academic_year'])
-                    ->first();
-                if (!$cuy) {
-                    // Create mapping on the fly if missing
-                    $cuy = CourseUnitYear::firstOrCreate([
-                        'course_id' => $assignment['course_id'],
-                        'unit_id' => $assignment['unit_id'],
-                        'academic_year' => $assignment['academic_year'],
-                    ], [
-                        'semester' => $assignment['semester'] ?? null,
-                    ]);
-                } else {
-                    // Update semester if changed (allow clearing by setting to null)
-                    $newSemester = !empty($assignment['semester']) ? $assignment['semester'] : null;
-                    if ($cuy->semester !== $newSemester) {
-                        $cuy->semester = $newSemester;
-                        $cuy->save();
-                    }
-                }
-
-                // Check if this unit is already assigned to another lecturer
-                $existingAssignment = DB::table('course_unit_year_user')
-                    ->where('course_unit_year_id', $cuy->id)
-                    ->where('user_id', '!=', $lecturer->id)
-                    ->first();
-
-                if ($existingAssignment) {
-                    $existingLecturer = DB::table('users')->where('id', $existingAssignment->user_id)->first();
-                    $unit = DB::table('units')->where('id', $assignment['unit_id'])->first();
-                    return back()->withErrors([
-                        'course_assignments' => "Unit '{$unit->code} - {$unit->name}' in course '{$course->name}' is already assigned to lecturer '{$existingLecturer->name}'. Each unit can only be taught by one lecturer per course."
-                    ])->withInput();
-                }
-
-                $cuyData[$cuy->id] = [
-                    'is_lab_only' => isset($assignment['is_lab_only']),
-                    'notes' => $assignment['notes'] ?? null,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-            }
-            
-            $lecturer->courseUnitYears()->sync($cuyData);
+                return redirect()->route('institution-admin.lecturers.index')
+                    ->with('success', 'Lecturer created successfully.');
+            });
+        } catch (\Exception $e) {
+            return back()->withErrors(['course_assignments' => $e->getMessage()])->withInput();
         }
-
-        return redirect()->route('institution-admin.lecturers.index')
-            ->with('success', 'Lecturer created successfully.');
     }
 
     public function show(User $lecturer)
@@ -218,7 +110,7 @@ $lecturerProfile = LecturerProfile::create([
         $stats = [
             'total_courses' => $courses->unique('id')->count(),
             'departments' => $courses->pluck('department.name')->filter()->unique()->count(),
-            'active_timetables' => 0 // TODO: implement when timetable entries are ready
+            'active_timetables' => 0 
         ];
         
         return view('institution-admin.lecturers.show', compact('lecturer', 'stats', 'courses'));
@@ -228,47 +120,7 @@ $lecturerProfile = LecturerProfile::create([
     {
         $this->authorize('update', $lecturer);
         
-        $institution = auth()->user()->institution;
-        $departments = $institution->departments()->get();
-        $courses = $institution->departments()->with('courses')->get()->pluck('courses')->flatten();
-        $coursesForJs = $courses->map(function($course){
-            return [
-                'id' => $course->id,
-                'name' => $course->name,
-                'department' => optional($course->department)->name,
-                'lab_required' => (bool)($course->lab_required ?? false),
-            ];
-        })->values();
-
-        // Build mappings and unit lists for JS
-        $courseUnitYears = CourseUnitYear::with(['course.department','unit'])
-            ->whereHas('course.department', function($q) use ($institution) {
-                $q->where('institution_id', $institution->id);
-            })->get();
-        $cuyForJs = $courseUnitYears->filter(function($m) {
-            return $m->unit !== null; // Only include mappings with valid units
-        })->map(function($m) {
-            return [
-                'course_id' => $m->course_id,
-                'unit_id' => $m->unit_id,
-                'unit_code' => $m->unit->code ?? '',
-                'unit_name' => $m->unit->name ?? '',
-                'academic_year' => $m->academic_year,
-                'semester' => $m->semester,
-            ];
-        })->values();
-        $unitsForJs = Unit::where('institution_id', $institution->id)
-            ->orderBy('code')
-            ->get(['id','code','name','year_level'])
-            ->map(function($u){
-            return [
-                'id' => $u->id,
-                'code' => $u->code,
-                'name' => $u->name,
-                'year_level' => $u->year_level,
-            ];
-        });
-
+        $data = $this->getLecturerFormData();
         $lecturerCourseAssignments = $lecturer->courseUnitYears->map(function($m) {
             return [
                 'course_id' => $m->course_id,
@@ -283,10 +135,10 @@ $lecturerProfile = LecturerProfile::create([
             ];
         })->toArray();
         
-        $allUnits = Unit::where('institution_id', $institution->id)
-            ->orderBy('code')
-            ->get();
-        return view('institution-admin.lecturers.edit', compact('lecturer', 'departments', 'courses', 'coursesForJs', 'cuyForJs', 'unitsForJs', 'lecturerCourseAssignments', 'allUnits'));
+        return view('institution-admin.lecturers.edit', array_merge($data, [
+            'lecturer' => $lecturer,
+            'lecturerCourseAssignments' => $lecturerCourseAssignments,
+        ]));
     }
 
     public function update(Request $request, User $lecturer)
@@ -295,21 +147,7 @@ $lecturerProfile = LecturerProfile::create([
         
         $institution = auth()->user()->institution;
         
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => ['required', 'email', Rule::unique('users', 'email')->ignore($lecturer->id)],
-            'employee_id' => ['nullable', 'string', 'max:50', Rule::unique('users', 'employee_id')->ignore($lecturer->id)],
-            'department_id' => 'required|exists:departments,id',
-            'phone' => 'nullable|string|max:20',
-            'password' => 'nullable|string|min:8',
-'course_assignments' => 'array',
-            'course_assignments.*.course_id' => 'required|exists:courses,id',
-            'course_assignments.*.unit_id' => 'required|exists:units,id',
-'course_assignments.*.academic_year' => 'required|in:Y1,Y2,Y3,Y4,Y5',
-            'course_assignments.*.semester' => 'nullable|in:S1,S2',
-            'course_assignments.*.is_lab_only' => 'boolean',
-            'course_assignments.*.notes' => 'nullable|string|max:500'
-        ]);
+        $this->validateLecturer($request, $lecturer->id);
 
         // Verify department belongs to institution
         $department = Department::where('id', $request->department_id)
@@ -319,7 +157,7 @@ $lecturerProfile = LecturerProfile::create([
         $updateData = [
             'name' => $request->name,
             'email' => $request->email,
-'employee_id' => $request->employee_id,
+            'employee_id' => $request->employee_id,
             'department_id' => $request->department_id,
             'phone' => $request->phone,
         ];
@@ -328,66 +166,18 @@ $lecturerProfile = LecturerProfile::create([
             $updateData['password'] = Hash::make($request->password);
         }
 
-        $lecturer->update($updateData);
+        try {
+            return DB::transaction(function() use ($request, $lecturer, $institution, $updateData) {
+                $lecturer->update($updateData);
 
-        // Update unit-year assignments
-        $cuyData = [];
-        foreach ($request->course_assignments ?? [] as $assignment) {
-            // Verify course belongs to institution and mapping exists
-            $course = Course::where('id', $assignment['course_id'])
-                ->whereHas('department', function($query) use ($institution) {
-                    $query->where('institution_id', $institution->id);
-                })
-                ->first();
-            if (!$course) { continue; }
+                $this->syncCourseAssignments($lecturer, $request->course_assignments, $institution);
 
-            $cuy = CourseUnitYear::where('course_id', $assignment['course_id'])
-                ->where('unit_id', $assignment['unit_id'])
-                ->where('academic_year', $assignment['academic_year'])
-                ->first();
-            if (!$cuy) {
-                $cuy = CourseUnitYear::firstOrCreate([
-                    'course_id' => $assignment['course_id'],
-                    'unit_id' => $assignment['unit_id'],
-                    'academic_year' => $assignment['academic_year'],
-                ], [
-                    'semester' => $assignment['semester'] ?? null,
-                ]);
-            } else {
-                // Update semester if changed (allow clearing by setting to null)
-                $newSemester = !empty($assignment['semester']) ? $assignment['semester'] : null;
-                if ($cuy->semester !== $newSemester) {
-                    $cuy->semester = $newSemester;
-                    $cuy->save();
-                }
-            }
-
-            // Check if this unit is already assigned to another lecturer
-            $existingAssignment = DB::table('course_unit_year_user')
-                ->where('course_unit_year_id', $cuy->id)
-                ->where('user_id', '!=', $lecturer->id)
-                ->first();
-
-            if ($existingAssignment) {
-                $existingLecturer = DB::table('users')->where('id', $existingAssignment->user_id)->first();
-                $unit = DB::table('units')->where('id', $assignment['unit_id'])->first();
-                return back()->withErrors([
-                    'course_assignments' => "Unit '{$unit->code} - {$unit->name}' in course '{$course->name}' is already assigned to lecturer '{$existingLecturer->name}'. Each unit can only be taught by one lecturer per course."
-                ])->withInput();
-            }
-
-            $cuyData[$cuy->id] = [
-                'is_lab_only' => isset($assignment['is_lab_only']),
-                'notes' => $assignment['notes'] ?? null,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
+                return redirect()->route('institution-admin.lecturers.index')
+                    ->with('success', 'Lecturer updated successfully.');
+            });
+        } catch (\Exception $e) {
+            return back()->withErrors(['course_assignments' => $e->getMessage()])->withInput();
         }
-        
-        $lecturer->courseUnitYears()->sync($cuyData);
-
-        return redirect()->route('institution-admin.lecturers.index')
-            ->with('success', 'Lecturer updated successfully.');
     }
 
     public function destroy(User $lecturer)
@@ -419,5 +209,116 @@ $lecturerProfile = LecturerProfile::create([
 
         return redirect()->route('institution-admin.lecturers.index')
             ->with('success', 'Lecturer activated successfully.');
+    }
+
+    /**
+     * Shared logic for lecturer form data
+     */
+    private function getLecturerFormData()
+    {
+        $institution = auth()->user()->institution;
+        $departments = $institution->departments()->get();
+        $courses = $institution->departments()->with('courses')->get()->pluck('courses')->flatten();
+        $allUnits = Unit::where('institution_id', $institution->id)->orderBy('code')->get();
+
+        $coursesForJs = $courses->map(function($course){
+            return [
+                'id' => $course->id,
+                'name' => $course->name,
+                'department' => optional($course->department)->name,
+                'lab_required' => (bool)($course->lab_required ?? false),
+            ];
+        })->values();
+
+        $courseUnitYears = CourseUnitYear::with(['course.department','unit'])
+            ->whereHas('course.department', function($q) use ($institution) {
+                $q->where('institution_id', $institution->id);
+            })->get();
+
+        $cuyForJs = $courseUnitYears->filter(fn($m) => $m->unit !== null)->map(fn($m) => [
+            'course_id' => $m->course_id,
+            'unit_id' => $m->unit_id,
+            'unit_code' => $m->unit->code ?? '',
+            'unit_name' => $m->unit->name ?? '',
+            'academic_year' => $m->academic_year,
+            'semester' => $m->semester,
+        ])->values();
+
+        $unitsForJs = $allUnits->map(fn($u) => [
+            'id' => $u->id,
+            'code' => $u->code,
+            'name' => $u->name,
+            'year_level' => $u->year_level,
+        ]);
+
+        return compact('departments', 'courses', 'coursesForJs', 'cuyForJs', 'unitsForJs', 'allUnits');
+    }
+
+    /**
+     * Shared validation logic
+     */
+    private function validateLecturer(Request $request, $ignoreId = null)
+    {
+        return $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => ['required', 'email', Rule::unique('users', 'email')->ignore($ignoreId)],
+            'employee_id' => ['nullable', 'string', 'max:50', Rule::unique('users', 'employee_id')->ignore($ignoreId)],
+            'department_id' => 'required|exists:departments,id',
+            'phone' => 'nullable|string|max:20',
+            'password' => $ignoreId ? 'nullable|string|min:8' : 'required|string|min:8',
+            'course_assignments' => 'array',
+            'course_assignments.*.course_id' => 'required|exists:courses,id',
+            'course_assignments.*.unit_id' => 'required|exists:units,id',
+            'course_assignments.*.academic_year' => 'required|in:Y1,Y2,Y3,Y4,Y5',
+            'course_assignments.*.semester' => 'nullable|in:S1,S2',
+            'course_assignments.*.is_lab_only' => 'boolean',
+            'course_assignments.*.notes' => 'nullable|string|max:500'
+        ]);
+    }
+
+    /**
+     * Shared logic to sync course/unit assignments
+     */
+    private function syncCourseAssignments(User $lecturer, ?array $assignments, $institution)
+    {
+        if (!$assignments) {
+            $lecturer->courseUnitYears()->detach();
+            return;
+        }
+
+        $cuyData = [];
+        foreach ($assignments as $assignment) {
+            $course = Course::where('id', $assignment['course_id'])
+                ->whereHas('department', fn($q) => $q->where('institution_id', $institution->id))
+                ->first();
+            if (!$course) continue;
+
+            $cuy = CourseUnitYear::firstOrCreate([
+                'course_id' => $assignment['course_id'],
+                'unit_id' => $assignment['unit_id'],
+                'academic_year' => $assignment['academic_year'],
+            ], [
+                'semester' => $assignment['semester'] ?? null,
+            ]);
+
+            // Conflict check
+            $existing = DB::table('course_unit_year_user')
+                ->where('course_unit_year_id', $cuy->id)
+                ->where('user_id', '!=', $lecturer->id)
+                ->first();
+
+            if ($existing) {
+                $name = DB::table('users')->where('id', $existing->user_id)->value('name');
+                $unit = DB::table('units')->where('id', $assignment['unit_id'])->value('code');
+                throw new \Exception("Unit '{$unit}' in '{$course->name}' is already assigned to '{$name}'.");
+            }
+
+            $cuyData[$cuy->id] = [
+                'is_lab_only' => isset($assignment['is_lab_only']),
+                'notes' => $assignment['notes'] ?? null,
+                'updated_at' => now(),
+            ];
+        }
+        $lecturer->courseUnitYears()->sync($cuyData);
     }
 }

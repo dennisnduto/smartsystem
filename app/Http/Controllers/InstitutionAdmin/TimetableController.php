@@ -85,14 +85,43 @@ class TimetableController extends Controller
     {
         $this->authorize('view', $timetable);
         
-        $timetable->load(['department', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer', 'entries.teachingGroup']);
+        $timetableData = $this->prepareTimetableMatrixData($timetable);
+        $timetableGrid = $this->generateTimetableGrid($timetable);
         
-        // Pivot into Matrix for premium side-by-side view (matches lecturer/student views)
+        $rooms = Room::whereHas('department', function($q) use ($timetable) {
+            $q->where('institution_id', $timetable->institution_id);
+        })->get();
+        
+        $lecturers = User::where('role', 'lecturer')
+            ->where('institution_id', $timetable->institution_id)
+            ->get();
+
+        $conflictDetector = app(ConflictDetector::class);
+        $conflicts = $conflictDetector->detectConflicts($timetable);
+        $recommendations = $conflictDetector->getOptimizationRecommendations($timetable);
+        
+        return view('institution-admin.timetables.show', array_merge([
+            'timetable' => $timetable,
+            'timetableGrid' => $timetableGrid,
+            'rooms' => $rooms,
+            'lecturers' => $lecturers,
+            'conflicts' => $conflicts,
+            'recommendations' => $recommendations,
+            'courses' => collect()
+        ], $timetableData));
+    }
+
+    /**
+     * Helper to prepare matrix and chunked program data for views and PDF
+     */
+    private function prepareTimetableMatrixData(Timetable $timetable)
+    {
+        $timetable->load(['entries.unit', 'entries.course', 'entries.room', 'entries.lecturer', 'entries.teachingGroup']);
+        
         $matrix = [];
         $programs = [];
         $entries = $timetable->entries;
 
-        // Ensure academic year retrieval with fallback
         $entries = $entries->map(function($entry) {
             $cuy = \Illuminate\Support\Facades\DB::table('course_unit_year')
                 ->where('course_id', $entry->course_id)
@@ -120,12 +149,10 @@ class TimetableController extends Controller
             $matrix[$entry->day_of_week][$entry->slot][$key] = $entry;
         }
 
-        // Sort programs naturally
         uksort($programs, function($a, $b) {
             return strnatcmp($a, $b);
         });
 
-        // Group and chunk
         $programsByCourse = [];
         foreach ($programs as $key => $details) {
             $course = $details['course'];
@@ -143,28 +170,12 @@ class TimetableController extends Controller
             }
         }
 
-        $days = $this->days;
-        $slots = [1 => '7:00-10:00', 2 => '10:00-13:00', 3 => '13:00-16:00', 4 => '16:00-19:00'];
-        
-        // Keep legacy timetableGrid for the "Grouped View" toggle which still uses it
-        $timetableGrid = $this->generateTimetableGrid($timetable);
-        $courses = collect(); 
-        $rooms = Room::whereHas('department', function($q) use ($timetable) {
-            $q->where('institution_id', $timetable->institution_id);
-        })->get();
-        
-        $lecturers = User::where('role', 'lecturer')
-            ->where('institution_id', $timetable->institution_id)
-            ->get();
-
-        $conflictDetector = app(ConflictDetector::class);
-        $conflicts = $conflictDetector->detectConflicts($timetable);
-        $recommendations = $conflictDetector->getOptimizationRecommendations($timetable);
-        
-        return view('institution-admin.timetables.show', compact(
-            'timetable', 'timetableGrid', 'courses', 'rooms', 'lecturers',
-            'matrix', 'programChunks', 'days', 'slots', 'conflicts', 'recommendations'
-        ));
+        return [
+            'matrix' => $matrix,
+            'programChunks' => $programChunks,
+            'days' => $this->days,
+            'slots' => $this->timeSlots
+        ];
     }
 
     /**
@@ -370,89 +381,28 @@ class TimetableController extends Controller
     {
         $this->authorize('view', $timetable);
         
-        $timetable->load(['institution', 'department', 'entries.unit', 'entries.course', 'entries.room', 'entries.lecturer', 'entries.teachingGroup']);
-        
-        $user = auth()->user();
         $courseId = $request->get('course_id');
         $courseName = '';
         
         if ($courseId) {
-            $course = $timetable->entries->where('course_id', $courseId)->first()?->course;
+            $entries = $timetable->entries()->where('course_id', $courseId)->get();
+            $course = $entries->first()?->course;
             if ($course) {
                 $courseName = $course->name;
-                $timetable->setRelation('entries', $timetable->entries->where('course_id', $courseId));
+                $timetable->setRelation('entries', $entries);
             }
         }
 
-        // Generate Matrix logic for PDF (matches show() and SelfServiceController)
-        $matrix = [];
-        $programs = [];
-        $entries = $timetable->entries;
-
-        $entries = $entries->map(function($entry) {
-            $cuy = \Illuminate\Support\Facades\DB::table('course_unit_year')
-                ->where('course_id', $entry->course_id)
-                ->where('unit_id', $entry->unit_id)
-                ->first();
-            
-            $entry->academic_year_val = $cuy->academic_year ?? $entry->timetable->academic_year ?? 'N/A';
-            return $entry;
-        });
-
-        foreach ($entries as $entry) {
-            $courseCode = !empty($entry->course->code) 
-                ? strtoupper($entry->course->code) 
-                : $this->abbreviateCourseName($entry->course->name ?? 'Unknown Course');
-                
-            $academicYear = $entry->academic_year_val;
-            $key = $courseCode . ' | ' . $academicYear;
-            
-            if (!isset($programs[$key])) {
-                $programs[$key] = [
-                    'course' => $courseCode,
-                    'year' => $academicYear,
-                ];
-            }
-            $matrix[$entry->day_of_week][$entry->slot][$key] = $entry;
-        }
-
-        uksort($programs, function($a, $b) {
-            return strnatcmp($a, $b);
-        });
-
-        $programsByCourse = [];
-        foreach ($programs as $key => $details) {
-            $course = $details['course'];
-            $programsByCourse[$course][$key] = $details;
-        }
-
-        $programChunks = [];
-        foreach ($programsByCourse as $course => $coursePrograms) {
-            $chunks = array_chunk($coursePrograms, 7, true);
-            foreach ($chunks as $chunk) {
-                $programChunks[] = [
-                    'course' => $course,
-                    'programs' => $chunk
-                ];
-            }
-        }
-
-        $days = $this->days;
-        $slots = [1 => '7:00-10:00', 2 => '10:00-13:00', 3 => '13:00-16:00', 4 => '16:00-19:00'];
+        $timetableData = $this->prepareTimetableMatrixData($timetable);
         $title = $courseId ? $courseName . ' Timetable' : 'Institution Wide Timetable';
-        $isInstitutional = true;
 
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('institution-admin.timetables.pdf', [
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('institution-admin.timetables.pdf', array_merge([
             'timetable' => $timetable,
             'courseName' => $courseName,
-            'matrix' => $matrix,
-            'programChunks' => $programChunks,
-            'days' => $days,
-            'slots' => $slots,
-            'user' => $user,
+            'user' => auth()->user(),
             'title' => $title,
-            'isInstitutional' => $isInstitutional
-        ]);
+            'isInstitutional' => true
+        ], $timetableData));
         
         $pdf->setPaper('A4', 'landscape');
         $pdf->setOptions([
@@ -579,6 +529,7 @@ class TimetableController extends Controller
             }
         }
         
+        return $grid;
     }
 
     /**

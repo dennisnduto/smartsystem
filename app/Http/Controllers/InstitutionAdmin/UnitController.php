@@ -61,11 +61,13 @@ class UnitController extends Controller
 
     public function edit(Unit $unit)
     {
+        $this->authorize('view', $unit);
         return view('institution-admin.units.edit', compact('unit'));
     }
 
     public function update(Request $request, Unit $unit)
     {
+        $this->authorize('update', $unit);
         $institution = Auth::user()->institution;
 
         $request->validate([
@@ -96,6 +98,7 @@ class UnitController extends Controller
 
     public function destroy(Unit $unit)
     {
+        $this->authorize('delete', $unit);
         // Optional: prevent deletion if mapped
         $unit->delete();
         return redirect()->route('institution-admin.units.index')->with('success', 'Unit deleted successfully.');

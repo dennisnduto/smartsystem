@@ -62,11 +62,6 @@ class User extends Authenticatable
 
     public function lecturer(): BelongsTo
     {
-        return $this->belongsTo(Lecturer::class);
-    }
-
-    public function lecturerProfile(): BelongsTo
-    {
         return $this->belongsTo(Lecturer::class, 'lecturer_id');
     }
 
