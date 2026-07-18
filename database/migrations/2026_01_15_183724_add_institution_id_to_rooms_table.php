@@ -16,13 +16,23 @@ return new class extends Migration
         });
     }
 
-        // Populate institution_id from department relationship
-        DB::statement('
-            UPDATE rooms r
-            INNER JOIN departments d ON r.department_id = d.id
-            SET r.institution_id = d.institution_id
-            WHERE r.institution_id IS NULL
-        ');
+        // Populate institution_id from department relationships without
+        // relying on database-specific UPDATE JOIN syntax.
+        DB::table('rooms')
+            ->whereNull('institution_id')
+            ->select(['id', 'department_id'])
+            ->orderBy('id')
+            ->each(function ($room) {
+                $institutionId = DB::table('departments')
+                    ->where('id', $room->department_id)
+                    ->value('institution_id');
+
+                if ($institutionId !== null) {
+                    DB::table('rooms')
+                        ->where('id', $room->id)
+                        ->update(['institution_id' => $institutionId]);
+                }
+            });
 
         // Make institution_id required after populating
         if (Schema::hasColumn('rooms', 'institution_id')) {
@@ -35,9 +45,11 @@ return new class extends Migration
                 // Foreign key might not exist, continue
             }
 
-            // Update column to be NOT NULL and recreate foreign key
-            DB::statement('ALTER TABLE rooms MODIFY institution_id BIGINT UNSIGNED NOT NULL');
-            
+            // Update column to be NOT NULL and recreate foreign key.
+            Schema::table('rooms', function (Blueprint $table) {
+                $table->unsignedBigInteger('institution_id')->nullable(false)->change();
+            });
+
             Schema::table('rooms', function (Blueprint $table) {
                 $table->foreign('institution_id')->references('id')->on('institutions')->cascadeOnDelete();
             });
