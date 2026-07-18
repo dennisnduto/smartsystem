@@ -3,7 +3,6 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -12,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Modify the enum to include 'pending_approval'
-        // MySQL doesn't support direct enum modification, so we use ALTER TABLE
-        DB::statement("ALTER TABLE timetables MODIFY COLUMN status ENUM('draft', 'pending_approval', 'approved', 'published') DEFAULT 'draft'");
+        Schema::table('timetables', function (Blueprint $table) {
+            $table->enum('status', ['draft', 'pending_approval', 'approved', 'published'])
+                ->default('draft')
+                ->change();
+        });
         
         // Add approved_at and approved_by columns
         Schema::table('timetables', function (Blueprint $table) {
@@ -33,7 +34,10 @@ return new class extends Migration
             $table->dropColumn('approved_at');
         });
         
-        // Revert enum back to original
-        DB::statement("ALTER TABLE timetables MODIFY COLUMN status ENUM('draft', 'published') DEFAULT 'draft'");
+        Schema::table('timetables', function (Blueprint $table) {
+            $table->enum('status', ['draft', 'published'])
+                ->default('draft')
+                ->change();
+        });
     }
 };
